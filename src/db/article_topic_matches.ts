@@ -31,6 +31,7 @@ export function getUnnotifiedMatches(): { article_id: number; topic_id: number; 
     JOIN articles a ON a.id = m.article_id
     JOIN topics t ON t.id = m.topic_id
     WHERE m.matched = 1 AND m.notified = 0
+    ORDER BY m.checked_at ASC, m.article_id ASC, m.topic_id ASC
   `).all() as any[];
 }
 

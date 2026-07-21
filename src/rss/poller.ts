@@ -74,7 +74,8 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
       title: feed.title?.trim() ?? feed.description?.trim() ?? url,
     };
   } catch (err: any) {
-    log("error", `Failed to fetch feed ${url}: ${err.message}`);
+    const cause = err.cause ? ` (cause: ${err.cause.message ?? err.cause})` : "";
+    log("error", `Failed to fetch feed ${url}: ${err.message}${cause}`);
     return null;
   }
 }
