@@ -1,24 +1,12 @@
 services:
-  opencode:
-    image: opencodeai/opencode:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - opencode_data:/opencode
-      - ./opencode.yml:/opencode/opencode.yml:ro
-    command: ["serve", "--port", "8000", "--host", "0.0.0.0"]
-
   bot:
     build: .
-    depends_on:
-      - opencode
     env_file:
       - .env
     environment:
-      - OPENCODE_SERVER_URL=http://opencode:8000
+      - OPENCODE_SERVER_URL=http://host.docker.internal:4096
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
-
-volumes:
-  opencode_data:

@@ -25,42 +25,65 @@ interface ClassifyResult {
   reason: string;
 }
 
+const SYSTEM_PROMPT = `You are a relevance classifier. Given an article and a list of topics, determine which topics the article is relevant to.
+Respond with strict JSON only — no markdown, no code fences, no extra text.
+Format: {"matches": [{"topic_id": <int>, "relevant": <bool>, "score": <0.0-1.0>, "reason": "<brief explanation>"}]}`;
+
 function buildPrompt(articleTitle: string, articleSummary: string | null, topics: TopicInfo[]): string {
   const topicLines = topics.map((t) => `  - id: ${t.id}, phrase: "${t.phrase}"`).join("\n");
-  return `You are a relevance classifier. Given an article and a list of topics, determine which topics the article is relevant to.
-
-Article title: ${articleTitle}
+  return `Article title: ${articleTitle}
 Article summary: ${articleSummary ?? "(no summary)"}
 
 Topics:
 ${topicLines}
 
-Respond with strict JSON only (no markdown, no code fences):
-{"matches": [{"topic_id": <int>, "relevant": <bool>, "score": <0.0-1.0>, "reason": "<brief explanation>"}]}`;
+Respond with strict JSON only.`;
 }
 
 async function callOpenCode(prompt: string): Promise<string | null> {
+  let sessionId: string | null = null;
   try {
-    const response = await fetch(`${config.OPENCODE_SERVER_URL}/v1/chat/completions`, {
+    const sessionRes = await fetch(`${config.OPENCODE_SERVER_URL}/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "newsbot-classifier" }),
+    });
+    if (!sessionRes.ok) {
+      log("error", `OpenCode session create returned ${sessionRes.status}: ${await sessionRes.text()}`);
+      return null;
+    }
+    const session = await sessionRes.json() as any;
+    sessionId = session.id;
+
+    const messageRes = await fetch(`${config.OPENCODE_SERVER_URL}/session/${sessionId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "classifier",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0,
+        model: { providerID: config.OPENCODE_PROVIDER_ID, modelID: config.OPENCODE_MODEL_ID },
+        tools: { "*": false },
+        system: SYSTEM_PROMPT,
+        parts: [{ type: "text", text: prompt }],
       }),
     });
 
-    if (!response.ok) {
-      log("error", `OpenCode API returned ${response.status}: ${await response.text()}`);
+    if (!messageRes.ok) {
+      log("error", `OpenCode message returned ${messageRes.status}: ${await messageRes.text()}`);
       return null;
     }
 
-    const data = await response.json() as any;
-    return data.choices?.[0]?.message?.content ?? null;
+    const data = await messageRes.json() as any;
+    const textParts = (data.parts ?? []).filter((p: any) => p.type === "text");
+    if (textParts.length === 0) return null;
+    return textParts[textParts.length - 1].text ?? null;
   } catch (err: any) {
     log("error", `OpenCode API call failed: ${err.message}`);
     return null;
+  } finally {
+    if (sessionId) {
+      fetch(`${config.OPENCODE_SERVER_URL}/session/${sessionId}`, { method: "DELETE" }).catch((err: any) => {
+        log("warn", `Failed to clean up OpenCode session ${sessionId}: ${err.message}`);
+      });
+    }
   }
 }
 
