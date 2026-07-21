@@ -6,13 +6,35 @@ import { log } from "../utils/log";
 const parser = new Parser({
   headers: { "User-Agent": "NewsBot/1.0" },
   timeout: 15000,
+  customFields: {
+    item: [
+      ["media:content", "mediaContent"],
+      ["media:thumbnail", "mediaThumbnail"],
+    ],
+  },
 });
 
 interface FetchResult {
-  articles: { guid: string; url?: string; title?: string; summary?: string; published_at?: string }[];
+  articles: { guid: string; url?: string; title?: string; summary?: string; published_at?: string; image_url?: string }[];
   etag?: string;
   lastModified?: string;
   title?: string;
+}
+
+function extractImageUrl(item: any): string | undefined {
+  const mediaContentUrl = item.mediaContent?.$?.url;
+  if (mediaContentUrl) return mediaContentUrl;
+
+  const mediaThumbnailUrl = item.mediaThumbnail?.$?.url;
+  if (mediaThumbnailUrl) return mediaThumbnailUrl;
+
+  if (item.enclosure?.url && item.enclosure.type?.startsWith("image/")) {
+    return item.enclosure.url;
+  }
+
+  const html: string | undefined = item.content ?? item["content:encoded"];
+  const match = html?.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return match?.[1];
 }
 
 async function fetchFeed(url: string, etag?: string | null, lastModified?: string | null): Promise<FetchResult | null> {
@@ -45,6 +67,7 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
         title: item.title,
         summary: item.contentSnippet ?? item.content ?? item.summary,
         published_at: item.pubDate ?? item.isoDate ?? undefined,
+        image_url: extractImageUrl(item),
       })),
       etag: response.headers.get("etag") ?? undefined,
       lastModified: response.headers.get("last-modified") ?? undefined,
@@ -91,6 +114,7 @@ export async function pollOnce(): Promise<void> {
           title: item.title,
           summary: item.summary,
           published_at: item.published_at,
+          image_url: item.image_url,
         });
         if (inserted) newCount++;
       }

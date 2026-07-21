@@ -23,10 +23,10 @@ export function upsertMatch(articleId: number, topicId: number, matched: boolean
   `).run(articleId, topicId, matched ? 1 : 0, score, reasoning);
 }
 
-export function getUnnotifiedMatches(): { article_id: number; topic_id: number; chat_id: number; title: string; url: string; summary: string; score: number | null; reasoning: string | null }[] {
+export function getUnnotifiedMatches(): { article_id: number; topic_id: number; chat_id: number; title: string; url: string; summary: string; image_url: string | null; score: number | null; reasoning: string | null }[] {
   const db = getDb();
   return db.prepare(`
-    SELECT m.article_id, m.topic_id, t.chat_id, a.title, a.url, a.summary, m.score, m.reasoning
+    SELECT m.article_id, m.topic_id, t.chat_id, a.title, a.url, a.summary, a.image_url, m.score, m.reasoning
     FROM article_topic_matches m
     JOIN articles a ON a.id = m.article_id
     JOIN topics t ON t.id = m.topic_id

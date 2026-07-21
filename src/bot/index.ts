@@ -105,7 +105,7 @@ bot.command("listfeeds", async (ctx) => {
     await ctx.reply("No feeds yet. Use /addfeed <url> to add one.");
     return;
   }
-  const lines = feeds.map((f) => `[${f.id}] ${f.title ?? f.url}`);
+  const lines = feeds.map((f) => `[${f.id}] ${f.title ?? f.url}${f.healthy ? "" : " ⚠️ failing"}`);
   await ctx.reply("All feeds:\n" + lines.join("\n"));
 });
 

@@ -51,4 +51,9 @@ export function runMigrations(): void {
       PRIMARY KEY (article_id, topic_id)
     );
   `);
+
+  const columns = db.prepare("PRAGMA table_info(articles)").all() as { name: string }[];
+  if (!columns.some((c) => c.name === "image_url")) {
+    db.exec("ALTER TABLE articles ADD COLUMN image_url TEXT");
+  }
 }

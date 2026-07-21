@@ -28,12 +28,12 @@ export function getFeedById(id: number): Feed | undefined {
 
 export function getAllFeeds(): Feed[] {
   const db = getDb();
-  return db.prepare("SELECT * FROM feeds WHERE healthy = 1").all() as Feed[];
+  return db.prepare("SELECT * FROM feeds").all() as Feed[];
 }
 
 export function getAllDistinctFeedUrls(): { id: number; url: string }[] {
   const db = getDb();
-  return db.prepare("SELECT id, url FROM feeds WHERE healthy = 1").all() as { id: number; url: string }[];
+  return db.prepare("SELECT id, url FROM feeds").all() as { id: number; url: string }[];
 }
 
 export function deleteFeed(id: number): boolean {
