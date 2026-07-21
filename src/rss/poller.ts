@@ -1,0 +1,99 @@
+import Parser from "rss-parser";
+import { getAllDistinctFeedUrls, getFeedById, updateFeedMeta } from "../db/feeds";
+import { insertArticle } from "../db/articles";
+import { log } from "../utils/log";
+
+const parser = new Parser({
+  headers: { "User-Agent": "NewsBot/1.0" },
+  timeout: 15000,
+});
+
+interface FetchResult {
+  articles: { guid: string; url?: string; title?: string; summary?: string; published_at?: string }[];
+  etag?: string;
+  lastModified?: string;
+  title?: string;
+}
+
+async function fetchFeed(url: string, etag?: string | null, lastModified?: string | null): Promise<FetchResult | null> {
+  try {
+    const headers: Record<string, string> = { "User-Agent": "NewsBot/1.0" };
+    if (etag) headers["If-None-Match"] = etag;
+    if (lastModified) headers["If-Modified-Since"] = lastModified;
+
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+
+    if (response.status === 304) {
+      return { articles: [], etag: etag ?? undefined, lastModified: lastModified ?? undefined };
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const xml = await response.text();
+    const feed = await parser.parseString(xml);
+
+    return {
+      articles: feed.items.map((item) => ({
+        guid: item.guid ?? item.link ?? item.title ?? "",
+        url: item.link,
+        title: item.title,
+        summary: item.contentSnippet ?? item.content ?? item.summary,
+        published_at: item.pubDate ?? item.isoDate ?? undefined,
+      })),
+      etag: response.headers.get("etag") ?? undefined,
+      lastModified: response.headers.get("last-modified") ?? undefined,
+      title: feed.title?.trim() ?? feed.description?.trim() ?? url,
+    };
+  } catch (err: any) {
+    log("error", `Failed to fetch feed ${url}: ${err.message}`);
+    return null;
+  }
+}
+
+export async function pollOnce(): Promise<void> {
+  const feeds = getAllDistinctFeedUrls();
+  if (feeds.length === 0) return;
+
+  log("info", `Polling ${feeds.length} feeds...`);
+
+  for (const feed of feeds) {
+    try {
+      const meta = getFeedById(feed.id);
+      const result = await fetchFeed(feed.url, meta?.etag, meta?.last_modified);
+      if (!result) {
+        updateFeedMeta(feed.id, { healthy: 0 });
+        continue;
+      }
+
+      updateFeedMeta(feed.id, {
+        title: result.title,
+        last_fetched_at: new Date().toISOString(),
+        etag: result.etag ?? null,
+        last_modified: result.lastModified ?? null,
+        healthy: 1,
+      });
+
+      if (result.articles.length === 0) continue;
+
+      let newCount = 0;
+      for (const item of result.articles) {
+        if (!item.guid) continue;
+        const inserted = insertArticle(feed.id, item.guid, {
+          url: item.url,
+          title: item.title,
+          summary: item.summary,
+          published_at: item.published_at,
+        });
+        if (inserted) newCount++;
+      }
+
+      if (newCount > 0) {
+        log("info", `Feed ${feed.url}: ${newCount} new articles`);
+      }
+    } catch (err: any) {
+      log("error", `Error processing feed ${feed.url}: ${err.message}`);
+    }
+  }
+}
