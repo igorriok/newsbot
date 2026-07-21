@@ -40,9 +40,10 @@ ${topicLines}
 Respond with strict JSON only.`;
 }
 
-async function callOpenCode(prompt: string): Promise<string | null> {
+async function callOpenCode(prompt: string, articleId: number): Promise<string | null> {
   let sessionId: string | null = null;
   try {
+    log("debug", `[article ${articleId}] Creating opencode session`);
     const sessionRes = await fetch(`${config.OPENCODE_SERVER_URL}/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -55,6 +56,7 @@ async function callOpenCode(prompt: string): Promise<string | null> {
     const session = await sessionRes.json() as any;
     sessionId = session.id;
 
+    log("info", `[article ${articleId}] Sending classification request to opencode (session ${sessionId}, model ${config.OPENCODE_PROVIDER_ID}/${config.OPENCODE_MODEL_ID})`);
     const messageRes = await fetch(`${config.OPENCODE_SERVER_URL}/session/${sessionId}/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -72,11 +74,17 @@ async function callOpenCode(prompt: string): Promise<string | null> {
     }
 
     const data = await messageRes.json() as any;
+    const tokens = data.info?.tokens;
+    log("info", `[article ${articleId}] Received opencode response (session ${sessionId})${tokens ? `, tokens: input=${tokens.input} output=${tokens.output} reasoning=${tokens.reasoning}` : ""}`);
+
     const textParts = (data.parts ?? []).filter((p: any) => p.type === "text");
-    if (textParts.length === 0) return null;
+    if (textParts.length === 0) {
+      log("warn", `[article ${articleId}] opencode response had no text parts`);
+      return null;
+    }
     return textParts[textParts.length - 1].text ?? null;
   } catch (err: any) {
-    log("error", `OpenCode API call failed: ${err.message}`);
+    log("error", `[article ${articleId}] OpenCode API call failed: ${err.message}`);
     return null;
   } finally {
     if (sessionId) {
@@ -113,13 +121,14 @@ export async function classifyArticle(
   if (topics.length === 0) return [];
 
   const prompt = buildPrompt(articleTitle, articleSummary, topics);
-  const raw = await callOpenCode(prompt);
+  const raw = await callOpenCode(prompt, articleId);
   if (!raw) return null;
 
   const result = parseResponse(raw);
   if (result) return result;
 
-  const retryRaw = await callOpenCode(prompt);
+  log("warn", `[article ${articleId}] Failed to parse classifier response, retrying`);
+  const retryRaw = await callOpenCode(prompt, articleId);
   if (!retryRaw) return null;
   return parseResponse(retryRaw);
 }

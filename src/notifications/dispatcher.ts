@@ -30,11 +30,14 @@ export async function dispatchNotifications(): Promise<void> {
         const reason = m.reasoning ? `\nWhy: ${m.reasoning}` : "";
         const msg = `${title}${score}\n${url}${reason}`;
 
+        log("debug", `Sending notification to chat ${chatId} (telegram_chat_id=${chat.telegram_chat_id}) for article ${m.article_id}, topic ${m.topic_id}`);
+
         await bot.api.sendMessage(chat.telegram_chat_id, msg, {
           link_preview_options: { is_disabled: true },
         });
 
         markNotified(m.article_id, m.topic_id);
+        log("info", `Sent notification to chat ${chatId} for article ${m.article_id}, topic ${m.topic_id}`);
 
         await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
       } catch (err: any) {

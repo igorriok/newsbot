@@ -1,73 +1,9 @@
 import { runMigrations } from "./db/schema";
-import { bot } from "./bot";
-import { pollOnce } from "./rss/poller";
-import { classifyArticle } from "./classifier/client";
-import { dispatchNotifications } from "./notifications/dispatcher";
-import { getUncheckedArticles } from "./db/articles";
-import { getAllTopics } from "./db/topics";
-import { upsertMatch } from "./db/article_topic_matches";
+import { bot, registerCommands } from "./bot";
+import { pollCycle } from "./jobs/cycle";
 import { log } from "./utils/log";
+import { config } from "./config";
 import cron from "node-cron";
-
-let running = false;
-
-async function runClassificationCycle(): Promise<void> {
-  const articles = getUncheckedArticles();
-  if (articles.length === 0) return;
-
-  const topics = getAllTopics().map((t) => ({ id: t.id, phrase: t.phrase }));
-  if (topics.length === 0) return;
-  const topicIds = new Set(topics.map((t) => t.id));
-
-  log("info", `Classifying ${articles.length} articles against ${topics.length} topics`);
-
-  const classifyOne = async (article: typeof articles[number]) => {
-    const result = await classifyArticle(
-      article.id,
-      article.title ?? "Untitled",
-      article.summary,
-      topics,
-    );
-
-    if (!result) {
-      log("warn", `Classification failed for article ${article.id}, skipping`);
-      return;
-    }
-
-    for (const r of result) {
-      if (!topicIds.has(r.topic_id)) {
-        log("warn", `Classifier returned unknown topic_id ${r.topic_id} for article ${article.id}, skipping`);
-        continue;
-      }
-      try {
-        upsertMatch(article.id, r.topic_id, r.relevant, r.score, r.reason);
-      } catch (err: any) {
-        log("error", `Failed to upsert match for article ${article.id}, topic ${r.topic_id}: ${err.message}`);
-      }
-    }
-  };
-
-  const concurrencyLimit = 5;
-  for (let i = 0; i < articles.length; i += concurrencyLimit) {
-    const batch = articles.slice(i, i + concurrencyLimit);
-    await Promise.all(batch.map(classifyOne));
-  }
-}
-
-async function pollCycle(): Promise<void> {
-  if (running) {
-    log("warn", "Previous poll cycle still running, skipping");
-    return;
-  }
-  running = true;
-  try {
-    await pollOnce();
-    await runClassificationCycle();
-    await dispatchNotifications();
-  } finally {
-    running = false;
-  }
-}
 
 async function main(): Promise<void> {
   runMigrations();
@@ -76,6 +12,9 @@ async function main(): Promise<void> {
   bot.catch((err) => {
     log("error", `Bot error: ${err.message}`);
   });
+
+  await registerCommands();
+  log("info", "Registered bot commands with Telegram");
 
   bot.start({
     onStart: () => {
@@ -86,7 +25,7 @@ async function main(): Promise<void> {
     process.exit(1);
   });
 
-  cron.schedule("*/10 * * * *", () => {
+  cron.schedule(config.POLL_CRON_SCHEDULE, () => {
     pollCycle().catch((err) => log("error", `Poll cycle failed: ${err.message}`));
   });
 

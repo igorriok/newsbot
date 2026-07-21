@@ -9,6 +9,7 @@ const configSchema = z.object({
   OPENCODE_PROVIDER_ID: z.string().default("opencode-go"),
   OPENCODE_MODEL_ID: z.string().default("deepseek-v4-flash"),
   DATABASE_PATH: z.string().default("./data/newsbot.db"),
+  POLL_CRON_SCHEDULE: z.string().default("*/10 * * * *"),
   ADMIN_TELEGRAM_IDS: z
     .string()
     .default("")

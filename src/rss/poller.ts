@@ -16,6 +16,7 @@ interface FetchResult {
 }
 
 async function fetchFeed(url: string, etag?: string | null, lastModified?: string | null): Promise<FetchResult | null> {
+  log("debug", `Fetching feed: ${url}`);
   try {
     const headers: Record<string, string> = { "User-Agent": "NewsBot/1.0" };
     if (etag) headers["If-None-Match"] = etag;
@@ -24,6 +25,7 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
     const response = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
 
     if (response.status === 304) {
+      log("info", `Feed not modified (304): ${url}`);
       return { articles: [], etag: etag ?? undefined, lastModified: lastModified ?? undefined };
     }
 
@@ -33,6 +35,8 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
 
     const xml = await response.text();
     const feed = await parser.parseString(xml);
+
+    log("info", `Fetched feed ${url}: HTTP ${response.status}, ${feed.items.length} items in response`);
 
     return {
       articles: feed.items.map((item) => ({
@@ -57,6 +61,8 @@ export async function pollOnce(): Promise<void> {
   if (feeds.length === 0) return;
 
   log("info", `Polling ${feeds.length} feeds...`);
+
+  let totalNewArticles = 0;
 
   for (const feed of feeds) {
     try {
@@ -91,9 +97,12 @@ export async function pollOnce(): Promise<void> {
 
       if (newCount > 0) {
         log("info", `Feed ${feed.url}: ${newCount} new articles`);
+        totalNewArticles += newCount;
       }
     } catch (err: any) {
       log("error", `Error processing feed ${feed.url}: ${err.message}`);
     }
   }
+
+  log("info", `Poll complete: ${totalNewArticles} new articles fetched across ${feeds.length} feeds`);
 }
