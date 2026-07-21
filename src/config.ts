@@ -9,6 +9,20 @@ const configSchema = z.object({
   OPENCODE_PROVIDER_ID: z.string().default("opencode-go"),
   OPENCODE_MODEL_ID: z.string().default("deepseek-v4-flash"),
   DATABASE_PATH: z.string().default("./data/newsbot.db"),
+  ADMIN_TELEGRAM_IDS: z
+    .string()
+    .default("")
+    .transform((s) =>
+      s
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+          const n = Number(part);
+          if (!Number.isInteger(n)) throw new Error(`Invalid ADMIN_TELEGRAM_IDS entry: "${part}"`);
+          return n;
+        }),
+    ),
 });
 
 export const config = configSchema.parse(process.env);

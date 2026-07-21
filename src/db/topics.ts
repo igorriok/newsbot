@@ -2,26 +2,26 @@ import { getDb } from "./connection";
 
 export interface Topic {
   id: number;
-  user_id: number;
+  chat_id: number;
   phrase: string;
   created_at: string;
 }
 
-export function insertTopic(userId: number, phrase: string): Topic {
+export function insertTopic(chatId: number, phrase: string): Topic {
   const db = getDb();
-  const info = db.prepare("INSERT INTO topics (user_id, phrase) VALUES (?, ?)").run(userId, phrase);
-  return { id: info.lastInsertRowid as number, user_id: userId, phrase, created_at: new Date().toISOString() };
+  const info = db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (?, ?)").run(chatId, phrase);
+  return { id: info.lastInsertRowid as number, chat_id: chatId, phrase, created_at: new Date().toISOString() };
 }
 
-export function deleteTopic(id: number, userId: number): boolean {
+export function deleteTopic(id: number, chatId: number): boolean {
   const db = getDb();
-  const info = db.prepare("DELETE FROM topics WHERE id = ? AND user_id = ?").run(id, userId);
+  const info = db.prepare("DELETE FROM topics WHERE id = ? AND chat_id = ?").run(id, chatId);
   return info.changes > 0;
 }
 
-export function getTopicsForUser(userId: number): Topic[] {
+export function getTopicsForChat(chatId: number): Topic[] {
   const db = getDb();
-  return db.prepare("SELECT * FROM topics WHERE user_id = ?").all(userId) as Topic[];
+  return db.prepare("SELECT * FROM topics WHERE chat_id = ?").all(chatId) as Topic[];
 }
 
 export function getAllTopics(): Topic[] {
@@ -29,9 +29,9 @@ export function getAllTopics(): Topic[] {
   return db.prepare("SELECT * FROM topics").all() as Topic[];
 }
 
-export function getTopicsByUserIds(userIds: number[]): Topic[] {
+export function getTopicsByChatIds(chatIds: number[]): Topic[] {
   const db = getDb();
-  if (userIds.length === 0) return [];
-  const placeholders = userIds.map(() => "?").join(",");
-  return db.prepare(`SELECT * FROM topics WHERE user_id IN (${placeholders})`).all(...userIds) as Topic[];
+  if (chatIds.length === 0) return [];
+  const placeholders = chatIds.map(() => "?").join(",");
+  return db.prepare(`SELECT * FROM topics WHERE chat_id IN (${placeholders})`).all(...chatIds) as Topic[];
 }

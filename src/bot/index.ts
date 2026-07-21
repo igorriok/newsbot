@@ -1,29 +1,32 @@
 import { Bot, Context, Keyboard } from "grammy";
 import { config } from "../config";
-import { upsertUser } from "../db/users";
-import { getFeedByUrl, insertFeed, getFeedById, getAllFeeds, updateFeedMeta } from "../db/feeds";
-import { subscribe, unsubscribe, getSubscriptionsForUser } from "../db/subscriptions";
-import { insertTopic, deleteTopic, getTopicsForUser } from "../db/topics";
+import { upsertChat } from "../db/chats";
+import { getFeedByUrl, insertFeed, deleteFeed, getAllFeeds } from "../db/feeds";
+import { insertTopic, deleteTopic, getTopicsForChat } from "../db/topics";
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
+const adminIds = new Set(config.ADMIN_TELEGRAM_IDS);
+
 bot.use(async (ctx, next) => {
-  if (ctx.from) {
-    upsertUser(ctx.from.id);
+  if (!ctx.from || !ctx.chat || !adminIds.has(ctx.from.id)) {
+    await ctx.reply("You are not authorized to use this bot.");
+    return;
   }
+  upsertChat(ctx.chat.id);
   await next();
 });
 
 bot.command("start", async (ctx) => {
   await ctx.reply(
-    "Welcome to NewsBot! I monitor RSS feeds and notify you about articles matching your topics.\n\n"
+    "Welcome to NewsBot! I monitor RSS feeds (global, shared by everyone) and notify each chat about articles matching that chat's own topics.\n\n"
     + "Commands:\n"
-    + "/addfeed <url> - Subscribe to an RSS feed\n"
-    + "/removefeed <id> - Unsubscribe from a feed\n"
-    + "/listfeeds - List your feeds\n"
-    + "/addtopic <phrase> - Add a topic to track\n"
-    + "/removetopic <id> - Remove a topic\n"
-    + "/listtopics - List your topics\n"
+    + "/addfeed <url> - Add an RSS feed (global, affects everyone)\n"
+    + "/removefeed <id> - Remove a feed (global, affects everyone)\n"
+    + "/listfeeds - List all feeds\n"
+    + "/addtopic <phrase> - Add a topic to track (this chat only)\n"
+    + "/removetopic <id> - Remove a topic (this chat only)\n"
+    + "/listtopics - List topics for this chat\n"
     + "/help - Show this message"
   );
 });
@@ -31,12 +34,12 @@ bot.command("start", async (ctx) => {
 bot.command("help", async (ctx) => {
   await ctx.reply(
     "Commands:\n"
-    + "/addfeed <url> - Subscribe to an RSS feed\n"
-    + "/removefeed <id> - Unsubscribe from a feed\n"
-    + "/listfeeds - List your feeds\n"
-    + "/addtopic <phrase> - Add a topic to track\n"
-    + "/removetopic <id> - Remove a topic\n"
-    + "/listtopics - List your topics"
+    + "/addfeed <url> - Add an RSS feed (global, affects everyone)\n"
+    + "/removefeed <id> - Remove a feed (global, affects everyone)\n"
+    + "/listfeeds - List all feeds\n"
+    + "/addtopic <phrase> - Add a topic to track (this chat only)\n"
+    + "/removetopic <id> - Remove a topic (this chat only)\n"
+    + "/listtopics - List topics for this chat"
   );
 });
 
@@ -47,15 +50,14 @@ bot.command("addfeed", async (ctx) => {
     return;
   }
 
-  let feed = getFeedByUrl(url);
-  if (!feed) {
-    feed = insertFeed(url);
+  const existing = getFeedByUrl(url);
+  if (existing) {
+    await ctx.reply(`Feed already exists: ${existing.url}`);
+    return;
   }
 
-  if (!ctx.from) return;
-  const user = upsertUser(ctx.from.id);
-  subscribe(user.id, feed.id);
-  await ctx.reply(`Subscribed to feed: ${feed.url}`);
+  const feed = insertFeed(url);
+  await ctx.reply(`Feed added globally: ${feed.url}`);
 });
 
 bot.command("removefeed", async (ctx) => {
@@ -66,22 +68,18 @@ bot.command("removefeed", async (ctx) => {
     return;
   }
 
-  if (!ctx.from) return;
-  const user = upsertUser(ctx.from.id);
-  unsubscribe(user.id, id);
-  await ctx.reply("Unsubscribed from feed.");
+  const ok = deleteFeed(id);
+  await ctx.reply(ok ? "Feed removed globally." : "Feed not found.");
 });
 
 bot.command("listfeeds", async (ctx) => {
-  if (!ctx.from) return;
-  const user = upsertUser(ctx.from.id);
-  const subs = getSubscriptionsForUser(user.id);
-  if (subs.length === 0) {
-    await ctx.reply("No subscriptions. Use /addfeed <url> to add one.");
+  const feeds = getAllFeeds();
+  if (feeds.length === 0) {
+    await ctx.reply("No feeds yet. Use /addfeed <url> to add one.");
     return;
   }
-  const lines = subs.map((s, i) => `${i + 1}. [${s.feed_id}] ${s.title ?? s.url}`);
-  await ctx.reply("Your feeds:\n" + lines.join("\n"));
+  const lines = feeds.map((f) => `[${f.id}] ${f.title ?? f.url}`);
+  await ctx.reply("All feeds:\n" + lines.join("\n"));
 });
 
 bot.command("addtopic", async (ctx) => {
@@ -91,9 +89,8 @@ bot.command("addtopic", async (ctx) => {
     return;
   }
 
-  if (!ctx.from) return;
-  const user = upsertUser(ctx.from.id);
-  const topic = insertTopic(user.id, phrase);
+  const chat = upsertChat(ctx.chat.id);
+  const topic = insertTopic(chat.id, phrase);
   await ctx.reply(`Added topic: "${topic.phrase}" (id: ${topic.id})`);
 });
 
@@ -105,20 +102,18 @@ bot.command("removetopic", async (ctx) => {
     return;
   }
 
-  if (!ctx.from) return;
-  const user = upsertUser(ctx.from.id);
-  const ok = deleteTopic(id, user.id);
+  const chat = upsertChat(ctx.chat.id);
+  const ok = deleteTopic(id, chat.id);
   await ctx.reply(ok ? "Topic removed." : "Topic not found.");
 });
 
 bot.command("listtopics", async (ctx) => {
-  if (!ctx.from) return;
-  const user = upsertUser(ctx.from.id);
-  const topics = getTopicsForUser(user.id);
+  const chat = upsertChat(ctx.chat.id);
+  const topics = getTopicsForChat(chat.id);
   if (topics.length === 0) {
     await ctx.reply("No topics. Use /addtopic <phrase> to add one.");
     return;
   }
   const lines = topics.map((t) => `[${t.id}] ${t.phrase}`);
-  await ctx.reply("Your topics:\n" + lines.join("\n"));
+  await ctx.reply("Topics for this chat:\n" + lines.join("\n"));
 });

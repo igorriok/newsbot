@@ -4,9 +4,8 @@ import { pollOnce } from "./rss/poller";
 import { classifyArticle } from "./classifier/client";
 import { dispatchNotifications } from "./notifications/dispatcher";
 import { getUncheckedArticles } from "./db/articles";
-import { getTopicsByUserIds } from "./db/topics";
+import { getAllTopics } from "./db/topics";
 import { upsertMatch } from "./db/article_topic_matches";
-import { getSubscribersForFeed } from "./db/subscriptions";
 import { log } from "./utils/log";
 import cron from "node-cron";
 
@@ -16,28 +15,13 @@ async function runClassificationCycle(): Promise<void> {
   const articles = getUncheckedArticles();
   if (articles.length === 0) return;
 
-  const byFeed = new Map<number, typeof articles>();
-  for (const a of articles) {
-    if (!byFeed.has(a.feed_id)) byFeed.set(a.feed_id, []);
-    byFeed.get(a.feed_id)!.push(a);
-  }
+  const topics = getAllTopics().map((t) => ({ id: t.id, phrase: t.phrase }));
+  if (topics.length === 0) return;
+  const topicIds = new Set(topics.map((t) => t.id));
 
-  const feedTopics = new Map<number, { id: number; phrase: string }[]>();
-  for (const [feedId] of byFeed) {
-    const userIds = getSubscribersForFeed(feedId);
-    const topics = getTopicsByUserIds(userIds);
-    feedTopics.set(feedId, topics.map((t) => ({ id: t.id, phrase: t.phrase })));
-  }
-
-  const allTopics = [...feedTopics.values()].flat();
-  if (allTopics.length === 0) return;
-  log("info", `Classifying ${articles.length} articles against ${allTopics.length} scoped topics`);
+  log("info", `Classifying ${articles.length} articles against ${topics.length} topics`);
 
   const classifyOne = async (article: typeof articles[number]) => {
-    const topics = feedTopics.get(article.feed_id);
-    if (!topics || topics.length === 0) return;
-    const topicIds = new Set(topics.map((t) => t.id));
-
     const result = await classifyArticle(
       article.id,
       article.title ?? "Untitled",

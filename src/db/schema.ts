@@ -4,9 +4,9 @@ export function runMigrations(): void {
   const db = getDb();
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
+    CREATE TABLE IF NOT EXISTS chats (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      telegram_id BIGINT NOT NULL UNIQUE,
+      telegram_chat_id BIGINT NOT NULL UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -20,15 +20,9 @@ export function runMigrations(): void {
       healthy INTEGER NOT NULL DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS subscriptions (
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
-      PRIMARY KEY (user_id, feed_id)
-    );
-
     CREATE TABLE IF NOT EXISTS topics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
       phrase TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

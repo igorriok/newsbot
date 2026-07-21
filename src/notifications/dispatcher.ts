@@ -13,16 +13,16 @@ export async function dispatchNotifications(): Promise<void> {
 
   const grouped = new Map<number, typeof matches>();
   for (const m of matches) {
-    if (!grouped.has(m.user_id)) grouped.set(m.user_id, []);
-    grouped.get(m.user_id)!.push(m);
+    if (!grouped.has(m.chat_id)) grouped.set(m.chat_id, []);
+    grouped.get(m.chat_id)!.push(m);
   }
 
-  for (const [userId, userMatches] of grouped) {
+  for (const [chatId, chatMatches] of grouped) {
     const db = getDb();
-    const user = db.prepare("SELECT telegram_id FROM users WHERE id = ?").get(userId) as { telegram_id: number } | undefined;
-    if (!user) continue;
+    const chat = db.prepare("SELECT telegram_chat_id FROM chats WHERE id = ?").get(chatId) as { telegram_chat_id: number } | undefined;
+    if (!chat) continue;
 
-    for (const m of userMatches) {
+    for (const m of chatMatches) {
       try {
         const title = m.title ?? "Untitled";
         const url = m.url ?? "";
@@ -30,7 +30,7 @@ export async function dispatchNotifications(): Promise<void> {
         const reason = m.reasoning ? `\nWhy: ${m.reasoning}` : "";
         const msg = `${title}${score}\n${url}${reason}`;
 
-        await bot.api.sendMessage(user.telegram_id, msg, {
+        await bot.api.sendMessage(chat.telegram_chat_id, msg, {
           link_preview_options: { is_disabled: true },
         });
 
@@ -38,7 +38,7 @@ export async function dispatchNotifications(): Promise<void> {
 
         await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
       } catch (err: any) {
-        log("error", `Failed to send notification to user ${userId}: ${err.message}`);
+        log("error", `Failed to send notification to chat ${chatId}: ${err.message}`);
       }
     }
   }

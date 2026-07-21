@@ -33,7 +33,13 @@ export function getAllFeeds(): Feed[] {
 
 export function getAllDistinctFeedUrls(): { id: number; url: string }[] {
   const db = getDb();
-  return db.prepare("SELECT DISTINCT f.id, f.url FROM feeds f INNER JOIN subscriptions s ON s.feed_id = f.id WHERE f.healthy = 1").all() as { id: number; url: string }[];
+  return db.prepare("SELECT id, url FROM feeds WHERE healthy = 1").all() as { id: number; url: string }[];
+}
+
+export function deleteFeed(id: number): boolean {
+  const db = getDb();
+  const info = db.prepare("DELETE FROM feeds WHERE id = ?").run(id);
+  return info.changes > 0;
 }
 
 export function updateFeedMeta(id: number, meta: { title?: string; etag?: string | null; last_modified?: string | null; last_fetched_at?: string; healthy?: number }): void {
