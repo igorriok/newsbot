@@ -2,8 +2,8 @@ import { Bot, Context, Keyboard } from "grammy";
 import { config } from "../config";
 import { upsertChat } from "../db/chats";
 import { getFeedByUrl, insertFeed, deleteFeed, getAllFeeds } from "../db/feeds";
-import { insertTopic, deleteTopic, getTopicsForChat } from "../db/topics";
-import { pollCycle, isCycleRunning } from "../jobs/cycle";
+import { insertTopic, deleteTopic, getTopicsForChat, getTopicByChatAndPhrase } from "../db/topics";
+import { pollCycle, isCycleRunning, classifyBacklogForNewTopic } from "../jobs/cycle";
 import { log } from "../utils/log";
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -117,8 +117,19 @@ bot.command("addtopic", async (ctx) => {
   }
 
   const chat = upsertChat(ctx.chat.id);
+
+  const existing = getTopicByChatAndPhrase(chat.id, phrase);
+  if (existing) {
+    await ctx.reply(`Already tracking topic: "${existing.phrase}"`);
+    return;
+  }
+
   const topic = insertTopic(chat.id, phrase);
-  await ctx.reply(`Added topic: "${topic.phrase}"`);
+  await ctx.reply(`Added topic: "${topic.phrase}". Checking existing articles for matches in the background...`);
+
+  classifyBacklogForNewTopic(topic).catch((err: any) => {
+    log("error", `Backfill classification failed for topic ${topic.id}: ${err.message}`);
+  });
 });
 
 bot.command("removetopic", async (ctx) => {

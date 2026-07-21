@@ -1,4 +1,5 @@
 import { getDb } from "./connection";
+import { log } from "../utils/log";
 
 export interface Article {
   id: number;
@@ -10,6 +11,7 @@ export interface Article {
   published_at: string | null;
   fetched_at: string;
   image_url: string | null;
+  image_checked: number;
 }
 
 export function insertArticle(feedId: number, guid: string, data: { url?: string; title?: string; summary?: string; published_at?: string; image_url?: string }): Article | null {
@@ -28,10 +30,39 @@ export function insertArticle(feedId: number, guid: string, data: { url?: string
       published_at: data.published_at ?? null,
       fetched_at: new Date().toISOString(),
       image_url: data.image_url ?? null,
+      image_checked: 0,
     };
   } catch {
+    if (data.image_url) {
+      const result = db.prepare(
+        "UPDATE articles SET image_url = ? WHERE feed_id = ? AND guid = ? AND image_url IS NULL"
+      ).run(data.image_url, feedId, guid);
+      if (result.changes > 0) {
+        log("debug", `Backfilled image_url for existing article (feed ${feedId}, guid ${guid})`);
+      }
+    }
     return null;
   }
+}
+
+export function updateArticleImage(id: number, imageUrl: string): void {
+  const db = getDb();
+  db.prepare("UPDATE articles SET image_url = ? WHERE id = ? AND image_url IS NULL").run(imageUrl, id);
+}
+
+export function markImageChecked(id: number): void {
+  const db = getDb();
+  db.prepare("UPDATE articles SET image_checked = 1 WHERE id = ?").run(id);
+}
+
+export function getArticlesMissingImage(limit: number): Article[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT * FROM articles
+    WHERE image_url IS NULL AND image_checked = 0 AND url IS NOT NULL
+    ORDER BY id ASC
+    LIMIT ?
+  `).all(limit) as Article[];
 }
 
 export function getArticleByGuid(feedId: number, guid: string): Article | undefined {
@@ -45,4 +76,14 @@ export function getUncheckedArticles(): Article[] {
     SELECT a.* FROM articles a
     WHERE a.id NOT IN (SELECT DISTINCT article_id FROM article_topic_matches)
   `).all() as Article[];
+}
+
+export function getArticlesUncheckedForTopic(topicId: number): Article[] {
+  const db = getDb();
+  return db.prepare(`
+    SELECT a.* FROM articles a
+    WHERE NOT EXISTS (
+      SELECT 1 FROM article_topic_matches m WHERE m.article_id = a.id AND m.topic_id = ?
+    )
+  `).all(topicId) as Article[];
 }

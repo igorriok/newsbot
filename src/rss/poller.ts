@@ -1,6 +1,6 @@
 import Parser from "rss-parser";
 import { getAllDistinctFeedUrls, getFeedById, updateFeedMeta } from "../db/feeds";
-import { insertArticle } from "../db/articles";
+import { insertArticle, updateArticleImage, getArticleByGuid, markImageChecked, getArticlesMissingImage } from "../db/articles";
 import { log } from "../utils/log";
 
 const parser = new Parser({
@@ -35,6 +35,25 @@ function extractImageUrl(item: any): string | undefined {
   const html: string | undefined = item.content ?? item["content:encoded"];
   const match = html?.match(/<img[^>]+src=["']([^"']+)["']/i);
   return match?.[1];
+}
+
+async function fetchOgImage(url: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "NewsBot/1.0" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return undefined;
+
+    const html = await response.text();
+    const match =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    return match?.[1];
+  } catch (err: any) {
+    log("debug", `Failed to fetch og:image from ${url}: ${err.message}`);
+    return undefined;
+  }
 }
 
 async function fetchFeed(url: string, etag?: string | null, lastModified?: string | null): Promise<FetchResult | null> {
@@ -80,6 +99,22 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
   }
 }
 
+async function backfillMissingImages(): Promise<void> {
+  const articles = getArticlesMissingImage(30);
+  if (articles.length === 0) return;
+
+  log("info", `Backfilling og:image for ${articles.length} existing articles missing an image`);
+  for (const article of articles) {
+    const ogImage = article.url ? await fetchOgImage(article.url) : undefined;
+    if (ogImage) {
+      updateArticleImage(article.id, ogImage);
+      log("debug", `Backfilled og:image for article ${article.id}: ${ogImage}`);
+    } else {
+      markImageChecked(article.id);
+    }
+  }
+}
+
 export async function pollOnce(): Promise<void> {
   const feeds = getAllDistinctFeedUrls();
   if (feeds.length === 0) return;
@@ -118,6 +153,17 @@ export async function pollOnce(): Promise<void> {
           image_url: item.image_url,
         });
         if (inserted) newCount++;
+
+        const current = inserted ?? getArticleByGuid(feed.id, item.guid);
+        if (current && !current.image_url && !current.image_checked && item.url) {
+          const ogImage = await fetchOgImage(item.url);
+          if (ogImage) {
+            updateArticleImage(current.id, ogImage);
+            log("debug", `Backfilled og:image for article ${current.id}: ${ogImage}`);
+          } else {
+            markImageChecked(current.id);
+          }
+        }
       }
 
       if (newCount > 0) {
@@ -130,4 +176,6 @@ export async function pollOnce(): Promise<void> {
   }
 
   log("info", `Poll complete: ${totalNewArticles} new articles fetched across ${feeds.length} feeds`);
+
+  await backfillMissingImages();
 }

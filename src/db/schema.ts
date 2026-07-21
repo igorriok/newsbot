@@ -56,4 +56,7 @@ export function runMigrations(): void {
   if (!columns.some((c) => c.name === "image_url")) {
     db.exec("ALTER TABLE articles ADD COLUMN image_url TEXT");
   }
+  if (!columns.some((c) => c.name === "image_checked")) {
+    db.exec("ALTER TABLE articles ADD COLUMN image_checked INTEGER NOT NULL DEFAULT 0");
+  }
 }

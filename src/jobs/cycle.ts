@@ -1,24 +1,18 @@
 import { pollOnce } from "../rss/poller";
 import { classifyArticle } from "../classifier/client";
 import { dispatchNotifications } from "../notifications/dispatcher";
-import { getUncheckedArticles } from "../db/articles";
-import { getAllTopics } from "../db/topics";
+import { Article, getUncheckedArticles, getArticlesUncheckedForTopic } from "../db/articles";
+import { getAllTopics, Topic } from "../db/topics";
 import { upsertMatch } from "../db/article_topic_matches";
 import { log } from "../utils/log";
 
 let running = false;
 
-async function runClassificationCycle(): Promise<void> {
-  const articles = getUncheckedArticles();
-  if (articles.length === 0) return;
-
-  const topics = getAllTopics().map((t) => ({ id: t.id, phrase: t.phrase }));
-  if (topics.length === 0) return;
+async function classifyArticlesAgainstTopics(articles: Article[], topics: { id: number; phrase: string }[]): Promise<void> {
+  if (articles.length === 0 || topics.length === 0) return;
   const topicIds = new Set(topics.map((t) => t.id));
 
-  log("info", `Classifying ${articles.length} articles against ${topics.length} topics`);
-
-  const classifyOne = async (article: typeof articles[number]) => {
+  const classifyOne = async (article: Article) => {
     const result = await classifyArticle(
       article.id,
       article.title ?? "Untitled",
@@ -52,6 +46,26 @@ async function runClassificationCycle(): Promise<void> {
     const batch = articles.slice(i, i + concurrencyLimit);
     await Promise.all(batch.map(classifyOne));
   }
+}
+
+async function runClassificationCycle(): Promise<void> {
+  const articles = getUncheckedArticles();
+  if (articles.length === 0) return;
+
+  const topics = getAllTopics().map((t) => ({ id: t.id, phrase: t.phrase }));
+  if (topics.length === 0) return;
+
+  log("info", `Classifying ${articles.length} articles against ${topics.length} topics`);
+  await classifyArticlesAgainstTopics(articles, topics);
+}
+
+export async function classifyBacklogForNewTopic(topic: Topic): Promise<void> {
+  const articles = getArticlesUncheckedForTopic(topic.id);
+  if (articles.length === 0) return;
+
+  log("info", `Backfilling ${articles.length} existing articles against new topic "${topic.phrase}" (id ${topic.id})`);
+  await classifyArticlesAgainstTopics(articles, [{ id: topic.id, phrase: topic.phrase }]);
+  await dispatchNotifications();
 }
 
 export function isCycleRunning(): boolean {
