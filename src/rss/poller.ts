@@ -1,6 +1,12 @@
 import Parser from "rss-parser";
 import { getAllDistinctFeedUrls, getFeedById, updateFeedMeta } from "../db/feeds";
-import { insertArticle, updateArticleImage, getArticleByGuid, markImageChecked, getArticlesMissingImage } from "../db/articles";
+import {
+  insertArticle,
+  updateArticleImage,
+  getArticleByGuid,
+  markImageChecked,
+  getArticlesMissingImage,
+} from "../db/articles";
 import { log } from "../utils/log";
 
 const parser = new Parser({
@@ -15,7 +21,14 @@ const parser = new Parser({
 });
 
 interface FetchResult {
-  articles: { guid: string; url?: string; title?: string; summary?: string; published_at?: string; image_url?: string }[];
+  articles: {
+    guid: string;
+    url?: string;
+    title?: string;
+    summary?: string;
+    published_at?: string;
+    image_url?: string;
+  }[];
   etag?: string;
   lastModified?: string;
   title?: string;
@@ -66,8 +79,9 @@ async function fetchOgImage(url: string): Promise<string | undefined> {
 
     // Fallback for WordPress sites without an SEO plugin exposing og:image: the
     // standard featured-image markup still carries a recognizable class.
-    const featuredImage = html.match(/<img[^>]+class=["'][^"']*wp-post-image[^"']*["'][^>]+src=["']([^"']+)["']/i)
-      ?? html.match(/<img[^>]+src=["']([^"']+)["'][^>]+class=["'][^"']*wp-post-image[^"']*["']/i);
+    const featuredImage =
+      html.match(/<img[^>]+class=["'][^"']*wp-post-image[^"']*["'][^>]+src=["']([^"']+)["']/i) ??
+      html.match(/<img[^>]+src=["']([^"']+)["'][^>]+class=["'][^"']*wp-post-image[^"']*["']/i);
     if (featuredImage?.[1]) return sanitizeImageUrl(featuredImage[1]);
 
     return undefined;
@@ -79,6 +93,7 @@ async function fetchOgImage(url: string): Promise<string | undefined> {
 
 async function fetchFeed(url: string, etag?: string | null, lastModified?: string | null): Promise<FetchResult | null> {
   log("debug", `Fetching feed: ${url}`);
+
   try {
     const headers: Record<string, string> = { "User-Agent": "NewsBot/1.0" };
     if (etag) headers["If-None-Match"] = etag;
@@ -115,6 +130,7 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
     };
   } catch (err: any) {
     const cause = err.cause ? ` (cause: ${err.cause.message ?? err.cause})` : "";
+
     log("error", `Failed to fetch feed ${url}: ${err.message}${cause}`);
     return null;
   }
@@ -125,8 +141,10 @@ async function backfillMissingImages(): Promise<void> {
   if (articles.length === 0) return;
 
   log("info", `Backfilling og:image for ${articles.length} existing articles missing an image`);
+
   for (const article of articles) {
     const ogImage = article.url ? await fetchOgImage(article.url) : undefined;
+
     if (ogImage) {
       updateArticleImage(article.id, ogImage);
       log("debug", `Backfilled og:image for article ${article.id}: ${ogImage}`);
@@ -148,6 +166,7 @@ export async function pollOnce(): Promise<void> {
     try {
       const meta = getFeedById(feed.id);
       const result = await fetchFeed(feed.url, meta?.etag, meta?.last_modified);
+
       if (!result) {
         updateFeedMeta(feed.id, { healthy: 0 });
         continue;
@@ -164,6 +183,7 @@ export async function pollOnce(): Promise<void> {
       if (result.articles.length === 0) continue;
 
       let newCount = 0;
+
       for (const item of result.articles) {
         if (!item.guid) continue;
         const inserted = insertArticle(feed.id, item.guid, {
@@ -176,8 +196,10 @@ export async function pollOnce(): Promise<void> {
         if (inserted) newCount++;
 
         const current = inserted ?? getArticleByGuid(feed.id, item.guid);
+
         if (current && !current.image_url && !current.image_checked && item.url) {
           const ogImage = await fetchOgImage(item.url);
+
           if (ogImage) {
             updateArticleImage(current.id, ogImage);
             log("debug", `Backfilled og:image for article ${current.id}: ${ogImage}`);

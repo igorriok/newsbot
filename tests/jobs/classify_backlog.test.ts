@@ -13,11 +13,15 @@ describe("classifyBacklogForNewTopic", () => {
     });
   });
 
-  after(() => { mock.reset(); });
+  after(() => {
+    mock.reset();
+  });
 
   beforeEach(() => {
     cleanup = setupTestDb();
+
     const db = getDb();
+
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed')").run();
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (10001)").run();
     db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (1, 'test topic')").run();
@@ -30,9 +34,11 @@ describe("classifyBacklogForNewTopic", () => {
 
   it("only classifies articles unchecked for that specific topic", async () => {
     const db = getDb();
+
     db.prepare("INSERT INTO article_topic_matches (article_id, topic_id, matched) VALUES (1, 1, 1)").run();
 
-    let classified: number[] = [];
+    const classified: number[] = [];
+
     mock.module("../../src/classifier/client", {
       exports: {
         classifyArticle: (articleId: number) => {

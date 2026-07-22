@@ -13,7 +13,15 @@ export interface Feed {
 export function insertFeed(url: string): Feed {
   const db = getDb();
   const info = db.prepare("INSERT INTO feeds (url) VALUES (?)").run(url);
-  return { id: info.lastInsertRowid as number, url, title: null, last_fetched_at: null, etag: null, last_modified: null, healthy: 1 };
+  return {
+    id: info.lastInsertRowid as number,
+    url,
+    title: null,
+    last_fetched_at: null,
+    etag: null,
+    last_modified: null,
+    healthy: 1,
+  };
 }
 
 export function getFeedByUrl(url: string): Feed | undefined {
@@ -42,15 +50,45 @@ export function deleteFeed(id: number): boolean {
   return info.changes > 0;
 }
 
-export function updateFeedMeta(id: number, meta: { title?: string; etag?: string | null; last_modified?: string | null; last_fetched_at?: string; healthy?: number }): void {
+export function updateFeedMeta(
+  id: number,
+  meta: {
+    title?: string;
+    etag?: string | null;
+    last_modified?: string | null;
+    last_fetched_at?: string;
+    healthy?: number;
+  },
+): void {
   const db = getDb();
   const sets: string[] = [];
   const vals: any[] = [];
-  if (meta.title !== undefined) { sets.push("title = ?"); vals.push(meta.title); }
-  if (meta.etag !== undefined) { sets.push("etag = ?"); vals.push(meta.etag); }
-  if (meta.last_modified !== undefined) { sets.push("last_modified = ?"); vals.push(meta.last_modified); }
-  if (meta.last_fetched_at !== undefined) { sets.push("last_fetched_at = ?"); vals.push(meta.last_fetched_at); }
-  if (meta.healthy !== undefined) { sets.push("healthy = ?"); vals.push(meta.healthy); }
+
+  if (meta.title !== undefined) {
+    sets.push("title = ?");
+    vals.push(meta.title);
+  }
+
+  if (meta.etag !== undefined) {
+    sets.push("etag = ?");
+    vals.push(meta.etag);
+  }
+
+  if (meta.last_modified !== undefined) {
+    sets.push("last_modified = ?");
+    vals.push(meta.last_modified);
+  }
+
+  if (meta.last_fetched_at !== undefined) {
+    sets.push("last_fetched_at = ?");
+    vals.push(meta.last_fetched_at);
+  }
+
+  if (meta.healthy !== undefined) {
+    sets.push("healthy = ?");
+    vals.push(meta.healthy);
+  }
+
   if (sets.length === 0) return;
   vals.push(id);
   db.prepare(`UPDATE feeds SET ${sets.join(", ")} WHERE id = ?`).run(...vals);

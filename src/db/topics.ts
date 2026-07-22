@@ -26,7 +26,8 @@ export function getTopicsForChat(chatId: number): Topic[] {
 
 export function getTopicByChatAndPhrase(chatId: number, phrase: string): Topic | undefined {
   const db = getDb();
-  return db.prepare("SELECT * FROM topics WHERE chat_id = ? AND phrase = ? COLLATE NOCASE").get(chatId, phrase) as Topic | undefined;
+  return db.prepare("SELECT * FROM topics WHERE chat_id = ? AND phrase = ? COLLATE NOCASE").get(chatId, phrase) as
+    Topic | undefined;
 }
 
 export function getAllTopics(): Topic[] {

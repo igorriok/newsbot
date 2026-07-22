@@ -19,14 +19,21 @@ describe("pollCycle re-entrancy guard", () => {
     });
   });
 
-  after(() => { mock.reset(); });
+  after(() => {
+    mock.reset();
+  });
 
-  beforeEach(() => { cleanup = setupTestDb(); });
+  beforeEach(() => {
+    cleanup = setupTestDb();
+  });
   afterEach(() => cleanup());
 
   it("prevents concurrent execution", async () => {
     let pollOnceResolve: () => void;
-    const pollOncePromise = new Promise<void>((resolve) => { pollOnceResolve = resolve; });
+    const pollOncePromise = new Promise<void>((resolve) => {
+      pollOnceResolve = resolve;
+    });
+
     mock.module("../../src/rss/poller", {
       exports: {
         pollOnce: () => pollOncePromise,
@@ -36,6 +43,7 @@ describe("pollCycle re-entrancy guard", () => {
     const { pollCycle, isCycleRunning } = await import("../../src/jobs/cycle");
 
     const first = pollCycle();
+
     assert.equal(isCycleRunning(), true);
 
     const secondPromise = pollCycle();

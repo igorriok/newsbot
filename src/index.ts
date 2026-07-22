@@ -16,14 +16,16 @@ async function main(): Promise<void> {
   await registerCommands();
   log("info", "Registered bot commands with Telegram");
 
-  bot.start({
-    onStart: () => {
-      log("info", "Bot started, polling for updates...");
-    },
-  }).catch((err: any) => {
-    log("error", `Bot failed to start: ${err.message}`);
-    process.exit(1);
-  });
+  bot
+    .start({
+      onStart: () => {
+        log("info", "Bot started, polling for updates...");
+      },
+    })
+    .catch((err: any) => {
+      log("error", `Bot failed to start: ${err.message}`);
+      process.exit(1);
+    });
 
   cron.schedule(config.POLL_CRON_SCHEDULE, () => {
     pollCycle().catch((err) => log("error", `Poll cycle failed: ${err.message}`));
@@ -35,6 +37,7 @@ async function main(): Promise<void> {
     log("info", "Shutting down...");
     process.exit(0);
   };
+
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }

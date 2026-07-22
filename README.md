@@ -54,16 +54,16 @@ Both the SQLite database and a rolling log file (`newsbot.log`) live under `./da
 
 ## Bot commands
 
-| Command | Scope | Description |
-|---|---|---|
-| `/start`, `/help` | — | Show the command list |
-| `/addfeed <url>` | global | Add an RSS feed (affects every chat) |
-| `/removefeed <id>` | global | Remove a feed by id |
-| `/listfeeds` | global | List all feeds (⚠️ marks ones currently failing to fetch) |
-| `/addtopic <phrase>` | this chat | Track a topic — only this chat gets matched against it |
-| `/removetopic <id>` | this chat | Remove a topic by id |
-| `/listtopics` | this chat | List this chat's topics |
-| `/checkfeeds` | — | Manually trigger a feed check right now, instead of waiting for the cron schedule |
+| Command              | Scope     | Description                                                                       |
+| -------------------- | --------- | --------------------------------------------------------------------------------- |
+| `/start`, `/help`    | —         | Show the command list                                                             |
+| `/addfeed <url>`     | global    | Add an RSS feed (affects every chat)                                              |
+| `/removefeed <id>`   | global    | Remove a feed by id                                                               |
+| `/listfeeds`         | global    | List all feeds (⚠️ marks ones currently failing to fetch)                         |
+| `/addtopic <phrase>` | this chat | Track a topic — only this chat gets matched against it                            |
+| `/removetopic <id>`  | this chat | Remove a topic by id                                                              |
+| `/listtopics`        | this chat | List this chat's topics                                                           |
+| `/checkfeeds`        | —         | Manually trigger a feed check right now, instead of waiting for the cron schedule |
 
 If a URL is submitted to `/addfeed` without `http(s)://`, it's assumed to be `https://`.
 

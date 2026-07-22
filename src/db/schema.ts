@@ -53,9 +53,11 @@ export function runMigrations(): void {
   `);
 
   const columns = db.prepare("PRAGMA table_info(articles)").all() as { name: string }[];
+
   if (!columns.some((c) => c.name === "image_url")) {
     db.exec("ALTER TABLE articles ADD COLUMN image_url TEXT");
   }
+
   if (!columns.some((c) => c.name === "image_checked")) {
     db.exec("ALTER TABLE articles ADD COLUMN image_checked INTEGER NOT NULL DEFAULT 0");
   }
@@ -71,9 +73,9 @@ export function runMigrations(): void {
 // article and folding in any image_url the duplicates had found, before a unique
 // index on url makes that collision impossible going forward.
 function dedupeArticlesByUrl(db: ReturnType<typeof getDb>): void {
-  const dupUrls = db.prepare(
-    "SELECT url FROM articles WHERE url IS NOT NULL GROUP BY url HAVING COUNT(*) > 1"
-  ).all() as { url: string }[];
+  const dupUrls = db
+    .prepare("SELECT url FROM articles WHERE url IS NOT NULL GROUP BY url HAVING COUNT(*) > 1")
+    .all() as { url: string }[];
   if (dupUrls.length === 0) return;
 
   const getRows = db.prepare("SELECT id, image_url FROM articles WHERE url = ? ORDER BY id ASC");
@@ -89,5 +91,6 @@ function dedupeArticlesByUrl(db: ReturnType<typeof getDb>): void {
       for (const r of rest) deleteRow.run(r.id);
     }
   });
+
   tx(dupUrls.map((d) => d.url));
 }

@@ -9,6 +9,7 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
   }
+
   return db;
 }
 

@@ -8,17 +8,15 @@ import { log } from "../utils/log";
 
 let running = false;
 
-async function classifyArticlesAgainstTopics(articles: Article[], topics: { id: number; phrase: string }[]): Promise<void> {
+async function classifyArticlesAgainstTopics(
+  articles: Article[],
+  topics: { id: number; phrase: string }[],
+): Promise<void> {
   if (articles.length === 0 || topics.length === 0) return;
   const topicIds = new Set(topics.map((t) => t.id));
 
   const classifyOne = async (article: Article) => {
-    const result = await classifyArticle(
-      article.id,
-      article.title ?? "Untitled",
-      article.summary,
-      topics,
-    );
+    const result = await classifyArticle(article.id, article.title ?? "Untitled", article.summary, topics);
 
     if (!result) {
       log("warn", `Classification failed for article ${article.id}, skipping`);
@@ -26,6 +24,7 @@ async function classifyArticlesAgainstTopics(articles: Article[], topics: { id: 
     }
 
     const relevantCount = result.filter((r) => r.relevant).length;
+
     log("debug", `Article ${article.id}: ${relevantCount}/${result.length} topic matches relevant`);
 
     for (const r of result) {
@@ -33,6 +32,7 @@ async function classifyArticlesAgainstTopics(articles: Article[], topics: { id: 
         log("warn", `Classifier returned unknown topic_id ${r.topic_id} for article ${article.id}, skipping`);
         continue;
       }
+
       try {
         upsertMatch(article.id, r.topic_id, r.relevant, r.score, r.reason);
       } catch (err: any) {
@@ -42,8 +42,10 @@ async function classifyArticlesAgainstTopics(articles: Article[], topics: { id: 
   };
 
   const concurrencyLimit = 5;
+
   for (let i = 0; i < articles.length; i += concurrencyLimit) {
     const batch = articles.slice(i, i + concurrencyLimit);
+
     await Promise.all(batch.map(classifyOne));
   }
 }
@@ -77,8 +79,10 @@ export async function pollCycle(): Promise<void> {
     log("warn", "Previous poll cycle still running, skipping");
     return;
   }
+
   running = true;
   log("info", "Poll cycle starting");
+
   try {
     await pollOnce();
     await runClassificationCycle();

@@ -21,16 +21,29 @@ function makeFetchMock(
 }
 
 describe("classifyArticle", () => {
-  after(() => { mock.reset(); });
+  after(() => {
+    mock.reset();
+  });
 
   it("returns matches on successful session create → message → parse", async () => {
     let deleteCalled = false;
     const fetchMock = makeFetchMock((url: string) => {
       if (url === `${BASE}/session`) return Promise.resolve({ json: { id: "sess-1" } });
-      if (url === `${BASE}/session/sess-1/message`) return Promise.resolve({ json: { parts: [{ type: "text", text: '{"matches":[{"topic_id":1,"relevant":true,"score":0.9,"reason":"good"}]}' }] } });
-      if (url.startsWith(`${BASE}/session/`)) { deleteCalled = true; return Promise.resolve({ json: {} }); }
+      if (url === `${BASE}/session/sess-1/message`)
+        return Promise.resolve({
+          json: {
+            parts: [{ type: "text", text: '{"matches":[{"topic_id":1,"relevant":true,"score":0.9,"reason":"good"}]}' }],
+          },
+        });
+
+      if (url.startsWith(`${BASE}/session/`)) {
+        deleteCalled = true;
+        return Promise.resolve({ json: {} });
+      }
+
       return Promise.reject(new Error(`unexpected: ${url}`));
     });
+
     mock.method(global, "fetch", fetchMock);
 
     const { classifyArticle } = await import("../../src/classifier/client");
@@ -48,6 +61,7 @@ describe("classifyArticle", () => {
       if (url.startsWith(`${BASE}/session/`)) return Promise.resolve({ json: {} });
       return Promise.reject(new Error(`unexpected: ${url}`));
     });
+
     mock.method(global, "fetch", fetchMock);
 
     const { classifyArticle } = await import("../../src/classifier/client");
@@ -59,10 +73,12 @@ describe("classifyArticle", () => {
   it("returns null when message send fails (non-OK)", async () => {
     const fetchMock = makeFetchMock((url: string) => {
       if (url === `${BASE}/session`) return Promise.resolve({ json: { id: "sess-1" } });
-      if (url === `${BASE}/session/sess-1/message`) return Promise.resolve({ status: 400, ok: false, text: "Bad Request" });
+      if (url === `${BASE}/session/sess-1/message`)
+        return Promise.resolve({ status: 400, ok: false, text: "Bad Request" });
       if (url.startsWith(`${BASE}/session/`)) return Promise.resolve({ json: {} });
       return Promise.reject(new Error(`unexpected: ${url}`));
     });
+
     mock.method(global, "fetch", fetchMock);
 
     const { classifyArticle } = await import("../../src/classifier/client");
@@ -77,19 +93,22 @@ describe("classifyArticle", () => {
     const fetchMock = makeFetchMock((url: string) => {
       if (url === `${BASE}/session`) {
         sessionCalls++;
+
         const id = `sess-${sessionCalls}`;
         return Promise.resolve({ json: { id } });
       }
+
       if (url.startsWith(`${BASE}/session/`) && url.endsWith("/message")) {
         messageCalls++;
-        const text = messageCalls === 1
-          ? "not json"
-          : '{"matches":[{"topic_id":1,"relevant":true}]}';
+
+        const text = messageCalls === 1 ? "not json" : '{"matches":[{"topic_id":1,"relevant":true}]}';
         return Promise.resolve({ json: { parts: [{ type: "text", text }] } });
       }
+
       if (url.startsWith(`${BASE}/session/`)) return Promise.resolve({ json: {} });
       return Promise.reject(new Error(`unexpected: ${url}`));
     });
+
     mock.method(global, "fetch", fetchMock);
 
     const { classifyArticle } = await import("../../src/classifier/client");
@@ -106,9 +125,15 @@ describe("classifyArticle", () => {
     const fetchMock = makeFetchMock((url: string) => {
       if (url === `${BASE}/session`) return Promise.resolve({ json: { id: "sess-1" } });
       if (url === `${BASE}/session/sess-1/message`) return Promise.resolve({ status: 500, ok: false, text: "error" });
-      if (url.startsWith(`${BASE}/session/`)) { deletes.push(url); return Promise.resolve({ json: {} }); }
+
+      if (url.startsWith(`${BASE}/session/`)) {
+        deletes.push(url);
+        return Promise.resolve({ json: {} });
+      }
+
       return Promise.reject(new Error(`unexpected: ${url}`));
     });
+
     mock.method(global, "fetch", fetchMock);
 
     const { classifyArticle } = await import("../../src/classifier/client");
@@ -121,6 +146,7 @@ describe("classifyArticle", () => {
   it("returns empty array when no topics provided", async () => {
     const { classifyArticle } = await import("../../src/classifier/client");
     const result = await classifyArticle(1, "Test", null, []);
+
     assert.deepEqual(result, []);
   });
 });
