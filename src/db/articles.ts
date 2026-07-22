@@ -24,7 +24,7 @@ export interface NewArticleData {
 }
 
 export function insertArticle(feedId: number, guid: string, data: NewArticleData): Article | null {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   if (data.url) {
     const existing: Article | undefined = db
@@ -90,19 +90,19 @@ export function insertArticle(feedId: number, guid: string, data: NewArticleData
 }
 
 export function updateArticleImage(id: number, imageUrl: string): void {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   db.prepare("UPDATE articles SET image_url = ? WHERE id = ? AND image_url IS NULL").run(imageUrl, id);
 }
 
 export function markImageChecked(id: number): void {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   db.prepare("UPDATE articles SET image_checked = 1 WHERE id = ?").run(id);
 }
 
 export function getArticlesMissingImage(limit: number): Article[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db
     .prepare<[number], Article>(
       `
@@ -116,14 +116,14 @@ export function getArticlesMissingImage(limit: number): Article[] {
 }
 
 export function getArticleByGuid(feedId: number, guid: string): Article | undefined {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db
     .prepare<[number, string], Article>("SELECT * FROM articles WHERE feed_id = ? AND guid = ?")
     .get(feedId, guid);
 }
 
 export function getUncheckedArticles(): Article[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db
     .prepare<[], Article>(
       `
@@ -135,7 +135,7 @@ export function getUncheckedArticles(): Article[] {
 }
 
 export function getArticlesUncheckedForTopic(topicId: number): Article[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db
     .prepare<[number], Article>(
       `

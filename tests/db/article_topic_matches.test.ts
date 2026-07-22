@@ -22,7 +22,7 @@ void describe("article_topic_matches", () => {
   void afterEach(() => cleanup());
 
   void it("upsertMatch inserts a new match", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (1001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed')").run();
@@ -47,7 +47,7 @@ void describe("article_topic_matches", () => {
   });
 
   void it("upsertMatch updates on conflict", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (2001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed2')").run();
@@ -73,7 +73,7 @@ void describe("article_topic_matches", () => {
   });
 
   void it("getUnnotifiedMatches only returns matched=1 AND notified=0", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (3001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed3')").run();
@@ -92,7 +92,7 @@ void describe("article_topic_matches", () => {
   });
 
   void it("getUnnotifiedMatches excludes notified and unmatched", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (4001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed4')").run();
@@ -110,7 +110,7 @@ void describe("article_topic_matches", () => {
   });
 
   void it("getUnnotifiedMatches returns oldest first", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (5001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed5')").run();
@@ -133,7 +133,7 @@ void describe("article_topic_matches", () => {
   });
 
   void it("markNotified only flips the specified pair", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (6001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed6')").run();

@@ -95,9 +95,7 @@ void describe("articles", () => {
 
     assert.equal(secondArticle, null);
 
-    const rows: SqlRow[] = getDb()
-      .prepare<[], SqlRow>("SELECT * FROM articles WHERE url = ?")
-      .all(url);
+    const rows: SqlRow[] = getDb().prepare<[], SqlRow>("SELECT * FROM articles WHERE url = ?").all(url);
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, firstArticle!.id);
@@ -122,9 +120,7 @@ void describe("articles", () => {
 
     assert.equal(secondArticle, null);
 
-    const row: SqlRow = getDb()
-      .prepare<[], SqlRow>("SELECT * FROM articles WHERE url = ?")
-      .get(url)!;
+    const row: SqlRow = getDb().prepare<[], SqlRow>("SELECT * FROM articles WHERE url = ?").get(url)!;
 
     assert.equal(row.image_url, "https://example.com/img.jpg");
   });
@@ -143,7 +139,7 @@ void describe("articles", () => {
 
   void it("getArticlesUncheckedForTopic filters by topic", () => {
     const chatId: number = upsertChat(10001).id;
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
     const article: Article | null = insertArticle(feed1Id, "guid-fk", {
       url: "https://example.com/fk",
       title: "FK test",
@@ -154,7 +150,10 @@ void describe("articles", () => {
 
     const unchecked: Article[] = getArticlesUncheckedForTopic(1);
 
-    assert.equal(unchecked.find((match) => match.id === article!.id), undefined);
+    assert.equal(
+      unchecked.find((match) => match.id === article!.id),
+      undefined,
+    );
   });
 
   void it("getArticlesMissingImage returns articles with null image_url and unchecked", () => {
@@ -166,6 +165,8 @@ void describe("articles", () => {
     const missing: Article[] = getArticlesMissingImage(10);
 
     assert.ok(missing.length > 0);
-    assert.ok(missing.every((article) => article.image_url === null && article.image_checked === 0 && article.url !== null));
+    assert.ok(
+      missing.every((article) => article.image_url === null && article.image_checked === 0 && article.url !== null),
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { pollOnce } from "../rss/poller";
-import { classifyArticle } from "../classifier/client";
+import { classifyArticle, ClassifyResult } from "../classifier/client";
 import { dispatchNotifications } from "../notifications/dispatcher";
 import { Article, getUncheckedArticles, getArticlesUncheckedForTopic } from "../db/articles";
 import { getAllTopics, Topic } from "../db/topics";
@@ -13,15 +13,12 @@ interface TopicInfo {
 
 let running: boolean = false;
 
-async function classifyArticlesAgainstTopics(
-  articles: Article[],
-  topics: TopicInfo[],
-): Promise<void> {
+async function classifyArticlesAgainstTopics(articles: Article[], topics: TopicInfo[]): Promise<void> {
   if (articles.length === 0 || topics.length === 0) return;
   const topicIds: Set<number> = new Set(topics.map((topic) => topic.id));
 
   const classifyOne: (article: Article) => Promise<void> = async (article: Article) => {
-    const result: Awaited<ReturnType<typeof classifyArticle>> = await classifyArticle(
+    const result: ClassifyResult[] | null = await classifyArticle(
       article.id,
       article.title ?? "Untitled",
       article.summary,

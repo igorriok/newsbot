@@ -1,17 +1,16 @@
 import { InputFile } from "grammy";
-import { getUnnotifiedMatches, markNotified } from "../db/article_topic_matches";
+import { getUnnotifiedMatches, markNotified, UnnotifiedMatch } from "../db/article_topic_matches";
 import { getDb } from "../db/connection";
 import { bot } from "../bot";
 import { log } from "../utils/log";
+import Database from "better-sqlite3";
 
 interface ChatRow {
   telegram_chat_id: number;
 }
 
-type Match = ReturnType<typeof getUnnotifiedMatches>[number];
-
-async function sendOne(match: Match): Promise<void> {
-  const db: ReturnType<typeof getDb> = getDb();
+async function sendOne(match: UnnotifiedMatch): Promise<void> {
+  const db: Database.Database = getDb();
   const chat: ChatRow | undefined = db
     .prepare<[number], ChatRow>("SELECT telegram_chat_id FROM chats WHERE id = ?")
     .get(match.chat_id);
@@ -28,8 +27,7 @@ async function sendOne(match: Match): Promise<void> {
   try {
     const title: string = match.title ?? "Untitled";
     const url: string = match.url ?? "";
-    const score: string =
-      match.score != null ? ` (relevance: ${(match.score * 100).toFixed(0)}%)` : "";
+    const score: string = match.score != null ? ` (relevance: ${(match.score * 100).toFixed(0)}%)` : "";
     const reason: string = match.reasoning ? `\nWhy: ${match.reasoning}` : "";
     const msg: string = `${title}${score}\n${url}${reason}`;
 
@@ -70,28 +68,28 @@ async function sendOne(match: Match): Promise<void> {
     }
 
     markNotified(match.article_id, match.topic_id);
-    log(
-      "info",
-      `Sent notification to chat ${match.chat_id} for article ${match.article_id}, topic ${match.topic_id}`,
-    );
+    log("info", `Sent notification to chat ${match.chat_id} for article ${match.article_id}, topic ${match.topic_id}`);
   } catch (err: unknown) {
-    log("error", `Failed to send notification to chat ${match.chat_id}: ${err instanceof Error ? err.message : String(err)}`);
+    log(
+      "error",
+      `Failed to send notification to chat ${match.chat_id}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
 export async function dispatchNotifications(): Promise<void> {
-  const matches: Match[] = getUnnotifiedMatches();
+  const matches: UnnotifiedMatch[] = getUnnotifiedMatches();
   if (matches.length === 0) return;
 
   // Throttle per chat: send at most one notification per chat per cycle (oldest first),
   // instead of one globally, so a busy chat can't starve out a quiet one.
-  const oldestPerChat: Map<number, Match> = new Map<number, Match>();
+  const oldestPerChat: Map<number, UnnotifiedMatch> = new Map<number, UnnotifiedMatch>();
 
   for (const match of matches) {
     if (!oldestPerChat.has(match.chat_id)) oldestPerChat.set(match.chat_id, match);
   }
 
-  const toSend: Match[] = [...oldestPerChat.values()];
+  const toSend: UnnotifiedMatch[] = [...oldestPerChat.values()];
   const remaining: number = matches.length - toSend.length;
 
   log(

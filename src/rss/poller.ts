@@ -47,6 +47,7 @@ interface ParserItem {
 interface FeedMeta {
   title?: string;
   description?: string;
+  items: ParserItem[];
 }
 
 const parser: Parser<FeedMeta, ParserItem> = new Parser<FeedMeta, ParserItem>({
@@ -153,7 +154,7 @@ async function fetchFeed(url: string, etag?: string | null, lastModified?: strin
     }
 
     const xml: string = await response.text();
-    const feed: Awaited<ReturnType<typeof parser.parseString>> = await parser.parseString(xml);
+    const feed: FeedMeta = await parser.parseString(xml);
 
     log("info", `Fetched feed ${url}: HTTP ${response.status}, ${feed.items.length} items in response`);
 

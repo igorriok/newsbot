@@ -9,7 +9,7 @@ export interface Topic {
 }
 
 export function insertTopic(chatId: number, phrase: string): Topic {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   const info: Database.RunResult = db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (?, ?)").run(chatId, phrase);
 
   return {
@@ -21,31 +21,31 @@ export function insertTopic(chatId: number, phrase: string): Topic {
 }
 
 export function deleteTopic(id: number, chatId: number): boolean {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   const info: Database.RunResult = db.prepare("DELETE FROM topics WHERE id = ? AND chat_id = ?").run(id, chatId);
 
   return info.changes > 0;
 }
 
 export function getTopicsForChat(chatId: number): Topic[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db.prepare<[number], Topic>("SELECT * FROM topics WHERE chat_id = ?").all(chatId);
 }
 
 export function getTopicByChatAndPhrase(chatId: number, phrase: string): Topic | undefined {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db
     .prepare<[number, string], Topic>("SELECT * FROM topics WHERE chat_id = ? AND phrase = ? COLLATE NOCASE")
     .get(chatId, phrase);
 }
 
 export function getAllTopics(): Topic[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db.prepare<[], Topic>("SELECT * FROM topics").all();
 }
 
 export function getTopicsByChatIds(chatIds: number[]): Topic[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   if (chatIds.length === 0) return [];
 

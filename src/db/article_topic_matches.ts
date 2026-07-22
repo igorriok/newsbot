@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import { getDb } from "./connection";
 
 export interface ArticleTopicMatch {
@@ -17,7 +18,7 @@ export function upsertMatch(
   score: number | null,
   reasoning: string | null,
 ): void {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   db.prepare(
     `
@@ -45,7 +46,7 @@ export interface UnnotifiedMatch {
 }
 
 export function getUnnotifiedMatches(): UnnotifiedMatch[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db
     .prepare<[], UnnotifiedMatch>(
       `
@@ -61,7 +62,7 @@ export function getUnnotifiedMatches(): UnnotifiedMatch[] {
 }
 
 export function markNotified(articleId: number, topicId: number): void {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   db.prepare("UPDATE article_topic_matches SET notified = 1 WHERE article_id = ? AND topic_id = ?").run(
     articleId,

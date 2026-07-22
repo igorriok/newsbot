@@ -15,7 +15,7 @@ interface DuplicateArticleRow {
 }
 
 export function runMigrations(): void {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS chats (
@@ -86,7 +86,7 @@ export function runMigrations(): void {
 // independently. Merge those down to one row per url, keeping the earliest
 // article and folding in any image_url the duplicates had found, before a unique
 // index on url makes that collision impossible going forward.
-function dedupeArticlesByUrl(db: ReturnType<typeof getDb>): void {
+function dedupeArticlesByUrl(db: Database.Database): void {
   const dupUrls: DuplicateUrlRow[] = db
     .prepare<[], DuplicateUrlRow>("SELECT url FROM articles WHERE url IS NOT NULL GROUP BY url HAVING COUNT(*) > 1")
     .all();

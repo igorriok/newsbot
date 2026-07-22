@@ -25,7 +25,7 @@ void describe("dispatchNotifications", () => {
   void beforeEach(() => {
     cleanup = setupTestDb();
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO chats (id, telegram_chat_id) VALUES (1, 10001)").run();
     db.prepare("INSERT INTO chats (id, telegram_chat_id) VALUES (2, 10002)").run();
@@ -62,7 +62,7 @@ void describe("dispatchNotifications", () => {
   void it("sends at most one notification per chat per cycle", async () => {
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 1, 1, 0.8, datetime('now'), 0)",
@@ -91,7 +91,7 @@ void describe("dispatchNotifications", () => {
   void it("skips and marks notified when chat_id no longer resolves", async () => {
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 5, 1, 0.8, datetime('now'), 0)",
@@ -111,7 +111,7 @@ void describe("dispatchNotifications", () => {
 
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (4, 4, 1, 0.9, datetime('now'), 0)",
@@ -132,7 +132,7 @@ void describe("dispatchNotifications", () => {
 
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (4, 2, 1, 0.9, datetime('now'), 0)",

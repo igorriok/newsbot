@@ -17,7 +17,7 @@ export interface FeedUrlRef {
 }
 
 export function insertFeed(url: string): Feed {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   const info: Database.RunResult = db.prepare("INSERT INTO feeds (url) VALUES (?)").run(url);
 
   return {
@@ -32,27 +32,27 @@ export function insertFeed(url: string): Feed {
 }
 
 export function getFeedByUrl(url: string): Feed | undefined {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db.prepare<[string], Feed>("SELECT * FROM feeds WHERE url = ?").get(url);
 }
 
 export function getFeedById(id: number): Feed | undefined {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db.prepare<[number], Feed>("SELECT * FROM feeds WHERE id = ?").get(id);
 }
 
 export function getAllFeeds(): Feed[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db.prepare<[], Feed>("SELECT * FROM feeds").all();
 }
 
 export function getAllDistinctFeedUrls(): FeedUrlRef[] {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   return db.prepare<[], FeedUrlRef>("SELECT id, url FROM feeds").all();
 }
 
 export function deleteFeed(id: number): boolean {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   const info: Database.RunResult = db.prepare("DELETE FROM feeds WHERE id = ?").run(id);
 
   return info.changes > 0;
@@ -68,7 +68,7 @@ export function updateFeedMeta(
     healthy?: number;
   },
 ): void {
-  const db: ReturnType<typeof getDb> = getDb();
+  const db: Database.Database = getDb();
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
 

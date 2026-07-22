@@ -17,7 +17,7 @@ void describe("schema", () => {
   void it("runMigrations is idempotent (safe to call twice)", () => {
     runMigrations();
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
     const tables: SqlRow[] = db
       .prepare<[], SqlRow>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all();
@@ -31,7 +31,7 @@ void describe("schema", () => {
   });
 
   void it("url-dedup migration merges duplicate-URL rows", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("DROP INDEX IF EXISTS idx_articles_url").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed-a')").run();
@@ -44,9 +44,7 @@ void describe("schema", () => {
 
     runMigrations();
 
-    const rows: SqlRow[] = db
-      .prepare<[], SqlRow>("SELECT id, url, image_url FROM articles ORDER BY id")
-      .all();
+    const rows: SqlRow[] = db.prepare<[], SqlRow>("SELECT id, url, image_url FROM articles ORDER BY id").all();
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, 1);
@@ -59,7 +57,7 @@ void describe("schema", () => {
   });
 
   void it("url-dedup folds in image_url from duplicate", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("DROP INDEX IF EXISTS idx_articles_url").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed-c')").run();
@@ -71,15 +69,13 @@ void describe("schema", () => {
 
     runMigrations();
 
-    const row: SqlRow = db
-      .prepare<[], SqlRow>("SELECT * FROM articles WHERE id = 1")
-      .get()!;
+    const row: SqlRow = db.prepare<[], SqlRow>("SELECT * FROM articles WHERE id = 1").get()!;
 
     assert.equal(row.image_url, "https://example.com/img.jpg");
   });
 
   void it("unique index rejects duplicate url after dedup", () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("DROP INDEX IF EXISTS idx_articles_url").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed-e')").run();

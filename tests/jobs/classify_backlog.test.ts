@@ -20,7 +20,7 @@ void describe("classifyBacklogForNewTopic", () => {
   void beforeEach(() => {
     cleanup = setupTestDb();
 
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed')").run();
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (10001)").run();
@@ -33,7 +33,7 @@ void describe("classifyBacklogForNewTopic", () => {
   void afterEach(() => cleanup());
 
   void it("only classifies articles unchecked for that specific topic", async () => {
-    const db: ReturnType<typeof getDb> = getDb();
+    const db: Database.Database = getDb();
 
     db.prepare("INSERT INTO article_topic_matches (article_id, topic_id, matched) VALUES (1, 1, 1)").run();
 
