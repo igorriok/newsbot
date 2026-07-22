@@ -59,4 +59,35 @@ export function runMigrations(): void {
   if (!columns.some((c) => c.name === "image_checked")) {
     db.exec("ALTER TABLE articles ADD COLUMN image_checked INTEGER NOT NULL DEFAULT 0");
   }
+
+  dedupeArticlesByUrl(db);
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_articles_url ON articles(url) WHERE url IS NOT NULL");
+}
+
+// The same story is sometimes syndicated across multiple RSS feeds from the same
+// site (e.g. a site's default feed and its /ru/ locale feed), producing separate
+// article rows with identical urls that each get classified and notified
+// independently. Merge those down to one row per url, keeping the earliest
+// article and folding in any image_url the duplicates had found, before a unique
+// index on url makes that collision impossible going forward.
+function dedupeArticlesByUrl(db: ReturnType<typeof getDb>): void {
+  const dupUrls = db.prepare(
+    "SELECT url FROM articles WHERE url IS NOT NULL GROUP BY url HAVING COUNT(*) > 1"
+  ).all() as { url: string }[];
+  if (dupUrls.length === 0) return;
+
+  const getRows = db.prepare("SELECT id, image_url FROM articles WHERE url = ? ORDER BY id ASC");
+  const updateImage = db.prepare("UPDATE articles SET image_url = ? WHERE id = ?");
+  const deleteRow = db.prepare("DELETE FROM articles WHERE id = ?");
+
+  const tx = db.transaction((urls: string[]) => {
+    for (const url of urls) {
+      const rows = getRows.all(url) as { id: number; image_url: string | null }[];
+      const [keep, ...rest] = rows;
+      const image = keep.image_url ?? rest.find((r) => r.image_url)?.image_url;
+      if (image && !keep.image_url) updateImage.run(image, keep.id);
+      for (const r of rest) deleteRow.run(r.id);
+    }
+  });
+  tx(dupUrls.map((d) => d.url));
 }

@@ -16,6 +16,19 @@ export interface Article {
 
 export function insertArticle(feedId: number, guid: string, data: { url?: string; title?: string; summary?: string; published_at?: string; image_url?: string }): Article | null {
   const db = getDb();
+
+  if (data.url) {
+    const existing = db.prepare("SELECT * FROM articles WHERE url = ?").get(data.url) as Article | undefined;
+    if (existing) {
+      if (data.image_url && !existing.image_url) {
+        db.prepare("UPDATE articles SET image_url = ? WHERE id = ? AND image_url IS NULL").run(data.image_url, existing.id);
+        log("debug", `Backfilled image_url for existing article ${existing.id} via url match (feed ${feedId}, guid ${guid})`);
+      }
+      log("debug", `Skipping duplicate article (url already seen as article ${existing.id}): ${data.url}`);
+      return null;
+    }
+  }
+
   try {
     const info = db.prepare(
       "INSERT INTO articles (feed_id, guid, url, title, summary, published_at, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)"
