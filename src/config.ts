@@ -10,6 +10,7 @@ const configSchema = z.object({
   OPENCODE_MODEL_ID: z.string().default("deepseek-v4-flash"),
   DATABASE_PATH: z.string().default("./data/newsbot.db"),
   POLL_CRON_SCHEDULE: z.string().default("*/10 * * * *"),
+  MIN_RELEVANCE_SCORE: z.coerce.number().min(0).max(1).default(0.5),
   ADMIN_TELEGRAM_IDS: z
     .string()
     .default("")

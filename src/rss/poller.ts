@@ -21,20 +21,27 @@ interface FetchResult {
   title?: string;
 }
 
+function sanitizeImageUrl(url: string): string {
+  // Some feeds (e.g. buggy WordPress media RSS plugins) duplicate the domain in the
+  // path, e.g. https://example.com/example.com/wp-content/... — collapse that back down.
+  const match = url.match(/^(https?:\/\/)([^/]+)\/\2(\/.*)$/);
+  return match ? `${match[1]}${match[2]}${match[3]}` : url;
+}
+
 function extractImageUrl(item: any): string | undefined {
   const mediaContentUrl = item.mediaContent?.$?.url;
-  if (mediaContentUrl) return mediaContentUrl;
+  if (mediaContentUrl) return sanitizeImageUrl(mediaContentUrl);
 
   const mediaThumbnailUrl = item.mediaThumbnail?.$?.url;
-  if (mediaThumbnailUrl) return mediaThumbnailUrl;
+  if (mediaThumbnailUrl) return sanitizeImageUrl(mediaThumbnailUrl);
 
   if (item.enclosure?.url && item.enclosure.type?.startsWith("image/")) {
-    return item.enclosure.url;
+    return sanitizeImageUrl(item.enclosure.url);
   }
 
   const html: string | undefined = item.content ?? item["content:encoded"];
   const match = html?.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return match?.[1];
+  return match?.[1] ? sanitizeImageUrl(match[1]) : undefined;
 }
 
 async function fetchOgImage(url: string): Promise<string | undefined> {
@@ -46,10 +53,24 @@ async function fetchOgImage(url: string): Promise<string | undefined> {
     if (!response.ok) return undefined;
 
     const html = await response.text();
-    const match =
+
+    const ogImage =
       html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
       html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-    return match?.[1];
+    if (ogImage?.[1]) return sanitizeImageUrl(ogImage[1]);
+
+    const twitterImage =
+      html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+    if (twitterImage?.[1]) return sanitizeImageUrl(twitterImage[1]);
+
+    // Fallback for WordPress sites without an SEO plugin exposing og:image: the
+    // standard featured-image markup still carries a recognizable class.
+    const featuredImage = html.match(/<img[^>]+class=["'][^"']*wp-post-image[^"']*["'][^>]+src=["']([^"']+)["']/i)
+      ?? html.match(/<img[^>]+src=["']([^"']+)["'][^>]+class=["'][^"']*wp-post-image[^"']*["']/i);
+    if (featuredImage?.[1]) return sanitizeImageUrl(featuredImage[1]);
+
+    return undefined;
   } catch (err: any) {
     log("debug", `Failed to fetch og:image from ${url}: ${err.message}`);
     return undefined;

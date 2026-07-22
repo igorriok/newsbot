@@ -8,7 +8,7 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 - **Topics are per-chat.** Each chat (a private DM or a group) sets its own topics, and only sees matches for its own topics — completely independent of which feed the article came from.
 - Every cycle: fetch all feeds → classify newly-fetched articles against every chat's topics → send one notification.
 - Classification is done by calling an [opencode](https://opencode.ai) server as an LLM classifier (no tools, a fixed system prompt, one throwaway session per call).
-- Notifications are throttled to **one message per cycle** — the rest stay queued and go out on subsequent cycles, oldest first.
+- Notifications are throttled to **one message per chat per cycle** — the rest stay queued and go out on subsequent cycles, oldest first.
 - If an article has an image (from RSS `media:content`/`media:thumbnail`, an image enclosure, or an `<img>` in the content), the notification is sent as a photo with a caption; otherwise as plain text.
 
 ## Requirements

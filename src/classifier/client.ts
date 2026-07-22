@@ -26,6 +26,9 @@ interface ClassifyResult {
 }
 
 const SYSTEM_PROMPT = `You are a relevance classifier. Given an article and a list of topics, determine which topics the article is relevant to.
+Mark a topic as relevant ONLY if the article is substantively ABOUT that topic — it's a central subject of the article.
+Do NOT mark a topic as relevant just because it is mentioned in passing, tangentially, or as incidental background detail (e.g. a location, affiliation, or minor detail unrelated to the article's main subject).
+If in doubt, mark relevant as false and give a low score.
 Respond with strict JSON only — no markdown, no code fences, no extra text.
 Format: {"matches": [{"topic_id": <int>, "relevant": <bool>, "score": <0.0-1.0>, "reason": "<brief explanation>"}]}`;
 
@@ -100,12 +103,15 @@ function parseResponse(text: string): ClassifyResult[] | null {
   try {
     const parsed = JSON.parse(cleaned);
     const validated = ResponseSchema.parse(parsed);
-    return validated.matches.map((m) => ({
-      topic_id: m.topic_id,
-      relevant: m.relevant,
-      score: m.score ?? (m.relevant ? 0.8 : 0.0),
-      reason: m.reason ?? "",
-    }));
+    return validated.matches.map((m) => {
+      const score = m.score ?? (m.relevant ? 0.8 : 0.0);
+      return {
+        topic_id: m.topic_id,
+        relevant: m.relevant && score >= config.MIN_RELEVANCE_SCORE,
+        score,
+        reason: m.reason ?? "",
+      };
+    });
   } catch (err: any) {
     log("error", `Failed to parse classifier response: ${err.message}, raw: ${text}`);
     return null;

@@ -3,13 +3,9 @@ import { getDb } from "../db/connection";
 import { bot } from "../bot";
 import { log } from "../utils/log";
 
-export async function dispatchNotifications(): Promise<void> {
-  const matches = getUnnotifiedMatches();
-  if (matches.length === 0) return;
+type Match = ReturnType<typeof getUnnotifiedMatches>[number];
 
-  const m = matches[0];
-  log("info", `Dispatching 1 notification (${matches.length - 1} remaining for next cycle)`);
-
+async function sendOne(m: Match): Promise<void> {
   const db = getDb();
   const chat = db.prepare("SELECT telegram_chat_id FROM chats WHERE id = ?").get(m.chat_id) as { telegram_chat_id: number } | undefined;
   if (!chat) {
@@ -48,5 +44,25 @@ export async function dispatchNotifications(): Promise<void> {
     log("info", `Sent notification to chat ${m.chat_id} for article ${m.article_id}, topic ${m.topic_id}`);
   } catch (err: any) {
     log("error", `Failed to send notification to chat ${m.chat_id}: ${err.message}`);
+  }
+}
+
+export async function dispatchNotifications(): Promise<void> {
+  const matches = getUnnotifiedMatches();
+  if (matches.length === 0) return;
+
+  // Throttle per chat: send at most one notification per chat per cycle (oldest first),
+  // instead of one globally, so a busy chat can't starve out a quiet one.
+  const oldestPerChat = new Map<number, Match>();
+  for (const m of matches) {
+    if (!oldestPerChat.has(m.chat_id)) oldestPerChat.set(m.chat_id, m);
+  }
+
+  const toSend = [...oldestPerChat.values()];
+  const remaining = matches.length - toSend.length;
+  log("info", `Dispatching ${toSend.length} notification(s) across ${toSend.length} chat(s) (${remaining} remaining for next cycle)`);
+
+  for (const m of toSend) {
+    await sendOne(m);
   }
 }
