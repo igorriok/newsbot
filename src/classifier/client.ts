@@ -18,7 +18,7 @@ interface TopicInfo {
   phrase: string;
 }
 
-interface ClassifyResult {
+export interface ClassifyResult {
   topic_id: number;
   relevant: boolean;
   score: number;
@@ -98,7 +98,7 @@ async function callOpenCode(prompt: string, articleId: number): Promise<string |
   }
 }
 
-function parseResponse(text: string): ClassifyResult[] | null {
+export function parseResponse(text: string): ClassifyResult[] | null {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
   try {
     const parsed = JSON.parse(cleaned);

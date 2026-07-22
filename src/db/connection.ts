@@ -11,3 +11,10 @@ export function getDb(): Database.Database {
   }
   return db;
 }
+
+export function resetDbForTests(path: string): void {
+  if (db) db.close();
+  db = new Database(path);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+}

@@ -1,3 +1,4 @@
+import { InputFile } from "grammy";
 import { getUnnotifiedMatches, markNotified } from "../db/article_topic_matches";
 import { getDb } from "../db/connection";
 import { bot } from "../bot";
@@ -24,15 +25,19 @@ async function sendOne(m: Match): Promise<void> {
     log("debug", `Sending notification to chat ${m.chat_id} (telegram_chat_id=${chat.telegram_chat_id}) for article ${m.article_id}, topic ${m.topic_id}`);
 
     if (m.image_url) {
+      const caption = msg.slice(0, 1024);
       try {
-        await bot.api.sendPhoto(chat.telegram_chat_id, m.image_url, {
-          caption: msg.slice(0, 1024),
-        });
+        await bot.api.sendPhoto(chat.telegram_chat_id, m.image_url, { caption });
       } catch (photoErr: any) {
-        log("warn", `Failed to send photo for article ${m.article_id}, falling back to text: ${photoErr.message}`);
-        await bot.api.sendMessage(chat.telegram_chat_id, msg, {
-          link_preview_options: { is_disabled: true },
-        });
+        log("warn", `Failed to send photo by URL for article ${m.article_id}, retrying via upload: ${photoErr.message}`);
+        try {
+          await bot.api.sendPhoto(chat.telegram_chat_id, new InputFile(new URL(m.image_url)), { caption });
+        } catch (uploadErr: any) {
+          log("warn", `Failed to send photo by upload for article ${m.article_id}, falling back to text: ${uploadErr.message}`);
+          await bot.api.sendMessage(chat.telegram_chat_id, msg, {
+            link_preview_options: { is_disabled: true },
+          });
+        }
       }
     } else {
       await bot.api.sendMessage(chat.telegram_chat_id, msg, {

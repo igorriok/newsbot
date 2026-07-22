@@ -21,14 +21,14 @@ interface FetchResult {
   title?: string;
 }
 
-function sanitizeImageUrl(url: string): string {
+export function sanitizeImageUrl(url: string): string {
   // Some feeds (e.g. buggy WordPress media RSS plugins) duplicate the domain in the
   // path, e.g. https://example.com/example.com/wp-content/... — collapse that back down.
   const match = url.match(/^(https?:\/\/)([^/]+)\/\2(\/.*)$/);
   return match ? `${match[1]}${match[2]}${match[3]}` : url;
 }
 
-function extractImageUrl(item: any): string | undefined {
+export function extractImageUrl(item: any): string | undefined {
   const mediaContentUrl = item.mediaContent?.$?.url;
   if (mediaContentUrl) return sanitizeImageUrl(mediaContentUrl);
 
