@@ -1,12 +1,12 @@
-import { Bot, Context, Keyboard } from "grammy";
+import { Bot } from "grammy";
 import { config } from "../config";
-import { upsertChat } from "../db/chats";
-import { getFeedByUrl, insertFeed, deleteFeed, getAllFeeds } from "../db/feeds";
-import { insertTopic, deleteTopic, getTopicsForChat, getTopicByChatAndPhrase } from "../db/topics";
+import { Chat, upsertChat } from "../db/chats";
+import { getFeedByUrl, insertFeed, deleteFeed, getAllFeeds, Feed } from "../db/feeds";
+import { insertTopic, deleteTopic, getTopicsForChat, getTopicByChatAndPhrase, Topic } from "../db/topics";
 import { pollCycle, isCycleRunning, classifyBacklogForNewTopic } from "../jobs/cycle";
 import { log } from "../utils/log";
 
-export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+export const bot: Bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
 export async function registerCommands(): Promise<void> {
   await bot.api.setMyCommands([
@@ -22,10 +22,10 @@ export async function registerCommands(): Promise<void> {
   ]);
 }
 
-const adminIds = new Set(config.ADMIN_TELEGRAM_IDS);
+const adminIds: Set<number> = new Set(config.ADMIN_TELEGRAM_IDS);
 
 bot.use(async (ctx, next) => {
-  const text = ctx.message?.text ?? ctx.channelPost?.text ?? "<non-text update>";
+  const text: string = ctx.message?.text ?? ctx.channelPost?.text ?? "<non-text update>";
 
   log("info", `Message from telegram_id=${ctx.from?.id} chat_id=${ctx.chat?.id} (${ctx.chat?.type}): ${text}`);
   await next();
@@ -37,7 +37,7 @@ bot.use(async (ctx, next) => {
     return;
   }
 
-  upsertChat(ctx.chat.id);
+  const chat: Chat = upsertChat(ctx.chat.id);
   await next();
 });
 
@@ -70,7 +70,7 @@ bot.command("help", async (ctx) => {
 });
 
 bot.command("addfeed", async (ctx) => {
-  let url = ctx.match.trim();
+  let url: string = ctx.match.trim();
 
   if (!url) {
     await ctx.reply("Usage: /addfeed <url>");
@@ -81,96 +81,96 @@ bot.command("addfeed", async (ctx) => {
     url = `https://${url}`;
   }
 
-  const existing = getFeedByUrl(url);
+  const existing: Feed | undefined = getFeedByUrl(url);
 
   if (existing) {
     await ctx.reply(`Feed already exists: ${existing.url}`);
     return;
   }
 
-  const feed = insertFeed(url);
+  const feed: Feed = insertFeed(url);
 
   await ctx.reply(`Feed added globally: ${feed.url}`);
 });
 
 bot.command("removefeed", async (ctx) => {
-  const idStr = ctx.match.trim();
-  const id = parseInt(idStr, 10);
+  const idStr: string = ctx.match.trim();
+  const id: number = parseInt(idStr, 10);
 
   if (!idStr || isNaN(id)) {
     await ctx.reply("Usage: /removefeed <id> (use /listfeeds to see IDs)");
     return;
   }
 
-  const ok = deleteFeed(id);
+  const removed: boolean = deleteFeed(id);
 
-  await ctx.reply(ok ? "Feed removed globally." : "Feed not found.");
+  await ctx.reply(removed ? "Feed removed globally." : "Feed not found.");
 });
 
 bot.command("listfeeds", async (ctx) => {
-  const feeds = getAllFeeds();
+  const feeds: Feed[] = getAllFeeds();
 
   if (feeds.length === 0) {
     await ctx.reply("No feeds yet. Use /addfeed <url> to add one.");
     return;
   }
 
-  const lines = feeds.map((f) => `[${f.id}] ${f.title ?? f.url}${f.healthy ? "" : " ⚠️ failing"}`);
+  const lines: string[] = feeds.map(
+    (feed) => `[${feed.id}] ${feed.title ?? feed.url}${feed.healthy ? "" : " ⚠️ failing"}`,
+  );
 
   await ctx.reply("All feeds:\n" + lines.join("\n"));
 });
 
 bot.command("addtopic", async (ctx) => {
-  const phrase = ctx.match.trim();
+  const phrase: string = ctx.match.trim();
 
   if (!phrase) {
     await ctx.reply("Usage: /addtopic <phrase>");
     return;
   }
 
-  const chat = upsertChat(ctx.chat.id);
-
-  const existing = getTopicByChatAndPhrase(chat.id, phrase);
+  const chat: Chat = upsertChat(ctx.chat.id);
+  const existing: Topic | undefined = getTopicByChatAndPhrase(chat.id, phrase);
 
   if (existing) {
     await ctx.reply(`Already tracking topic: "${existing.phrase}"`);
     return;
   }
 
-  const topic = insertTopic(chat.id, phrase);
+  const topic: Topic = insertTopic(chat.id, phrase);
 
   await ctx.reply(`Added topic: "${topic.phrase}". Checking existing articles for matches in the background...`);
-
-  classifyBacklogForNewTopic(topic).catch((err: any) => {
+  classifyBacklogForNewTopic(topic).catch((err: Error) => {
     log("error", `Backfill classification failed for topic ${topic.id}: ${err.message}`);
   });
 });
 
 bot.command("removetopic", async (ctx) => {
-  const idStr = ctx.match.trim();
-  const id = parseInt(idStr, 10);
+  const idStr: string = ctx.match.trim();
+  const id: number = parseInt(idStr, 10);
 
   if (!idStr || isNaN(id)) {
     await ctx.reply("Usage: /removetopic <id> (use /listtopics to see IDs)");
     return;
   }
 
-  const chat = upsertChat(ctx.chat.id);
-  const ok = deleteTopic(id, chat.id);
+  const chat: Chat = upsertChat(ctx.chat.id);
+  const removed: boolean = deleteTopic(id, chat.id);
 
-  await ctx.reply(ok ? "Topic removed." : "Topic not found.");
+  await ctx.reply(removed ? "Topic removed." : "Topic not found.");
 });
 
 bot.command("listtopics", async (ctx) => {
-  const chat = upsertChat(ctx.chat.id);
-  const topics = getTopicsForChat(chat.id);
+  const chat: Chat = upsertChat(ctx.chat.id);
+  const topics: Topic[] = getTopicsForChat(chat.id);
 
   if (topics.length === 0) {
     await ctx.reply("No topics. Use /addtopic <phrase> to add one.");
     return;
   }
 
-  const lines = topics.map((t) => `[${t.id}] ${t.phrase}`);
+  const lines: string[] = topics.map((topic) => `[${topic.id}] ${topic.phrase}`);
 
   await ctx.reply("Topics for this chat:\n" + lines.join("\n"));
 });
@@ -186,8 +186,8 @@ bot.command("checkfeeds", async (ctx) => {
   try {
     await pollCycle();
     await ctx.reply("Feed check complete.");
-  } catch (err: any) {
-    log("error", `Manual feed check failed: ${err.message}`);
+  } catch (err: unknown) {
+    log("error", `Manual feed check failed: ${err instanceof Error ? err.message : String(err)}`);
     await ctx.reply("Feed check failed, see logs.");
   }
 });

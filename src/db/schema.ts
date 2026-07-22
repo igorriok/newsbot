@@ -1,7 +1,21 @@
+import type Database from "better-sqlite3";
 import { getDb } from "./connection";
 
+interface TableColumn {
+  name: string;
+}
+
+interface DuplicateUrlRow {
+  url: string;
+}
+
+interface DuplicateArticleRow {
+  id: number;
+  image_url: string | null;
+}
+
 export function runMigrations(): void {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS chats (
@@ -52,13 +66,13 @@ export function runMigrations(): void {
     );
   `);
 
-  const columns = db.prepare("PRAGMA table_info(articles)").all() as { name: string }[];
+  const columns: TableColumn[] = db.prepare<[], TableColumn>("PRAGMA table_info(articles)").all();
 
-  if (!columns.some((c) => c.name === "image_url")) {
+  if (!columns.some((column) => column.name === "image_url")) {
     db.exec("ALTER TABLE articles ADD COLUMN image_url TEXT");
   }
 
-  if (!columns.some((c) => c.name === "image_checked")) {
+  if (!columns.some((column) => column.name === "image_checked")) {
     db.exec("ALTER TABLE articles ADD COLUMN image_checked INTEGER NOT NULL DEFAULT 0");
   }
 
@@ -73,24 +87,31 @@ export function runMigrations(): void {
 // article and folding in any image_url the duplicates had found, before a unique
 // index on url makes that collision impossible going forward.
 function dedupeArticlesByUrl(db: ReturnType<typeof getDb>): void {
-  const dupUrls = db
-    .prepare("SELECT url FROM articles WHERE url IS NOT NULL GROUP BY url HAVING COUNT(*) > 1")
-    .all() as { url: string }[];
+  const dupUrls: DuplicateUrlRow[] = db
+    .prepare<[], DuplicateUrlRow>("SELECT url FROM articles WHERE url IS NOT NULL GROUP BY url HAVING COUNT(*) > 1")
+    .all();
+
   if (dupUrls.length === 0) return;
 
-  const getRows = db.prepare("SELECT id, image_url FROM articles WHERE url = ? ORDER BY id ASC");
-  const updateImage = db.prepare("UPDATE articles SET image_url = ? WHERE id = ?");
-  const deleteRow = db.prepare("DELETE FROM articles WHERE id = ?");
+  const getRows: Database.Statement<[string], DuplicateArticleRow> = db.prepare<[string], DuplicateArticleRow>(
+    "SELECT id, image_url FROM articles WHERE url = ? ORDER BY id ASC",
+  );
+  const updateImage: Database.Statement<[string, number]> = db.prepare(
+    "UPDATE articles SET image_url = ? WHERE id = ?",
+  );
+  const deleteRow: Database.Statement<[number]> = db.prepare("DELETE FROM articles WHERE id = ?");
 
-  const tx = db.transaction((urls: string[]) => {
+  const mergeDuplicates: (urls: string[]) => void = db.transaction((urls: string[]) => {
     for (const url of urls) {
-      const rows = getRows.all(url) as { id: number; image_url: string | null }[];
+      const rows: DuplicateArticleRow[] = getRows.all(url);
       const [keep, ...rest] = rows;
-      const image = keep.image_url ?? rest.find((r) => r.image_url)?.image_url;
+      const image: string | null | undefined = keep.image_url ?? rest.find((row) => row.image_url)?.image_url;
+
       if (image && !keep.image_url) updateImage.run(image, keep.id);
-      for (const r of rest) deleteRow.run(r.id);
+
+      for (const row of rest) deleteRow.run(row.id);
     }
   });
 
-  tx(dupUrls.map((d) => d.url));
+  mergeDuplicates(dupUrls.map((dup) => dup.url));
 }

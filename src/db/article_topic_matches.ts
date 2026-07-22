@@ -17,7 +17,7 @@ export function upsertMatch(
   score: number | null,
   reasoning: string | null,
 ): void {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
 
   db.prepare(
     `
@@ -32,7 +32,7 @@ export function upsertMatch(
   ).run(articleId, topicId, matched ? 1 : 0, score, reasoning);
 }
 
-export function getUnnotifiedMatches(): {
+export interface UnnotifiedMatch {
   article_id: number;
   topic_id: number;
   chat_id: number;
@@ -42,10 +42,12 @@ export function getUnnotifiedMatches(): {
   image_url: string | null;
   score: number | null;
   reasoning: string | null;
-}[] {
-  const db = getDb();
+}
+
+export function getUnnotifiedMatches(): UnnotifiedMatch[] {
+  const db: ReturnType<typeof getDb> = getDb();
   return db
-    .prepare(
+    .prepare<[], UnnotifiedMatch>(
       `
     SELECT m.article_id, m.topic_id, t.chat_id, a.title, a.url, a.summary, a.image_url, m.score, m.reasoning
     FROM article_topic_matches m
@@ -55,11 +57,11 @@ export function getUnnotifiedMatches(): {
     ORDER BY m.checked_at ASC, m.article_id ASC, m.topic_id ASC
   `,
     )
-    .all() as any[];
+    .all();
 }
 
 export function markNotified(articleId: number, topicId: number): void {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
 
   db.prepare("UPDATE article_topic_matches SET notified = 1 WHERE article_id = ? AND topic_id = ?").run(
     articleId,

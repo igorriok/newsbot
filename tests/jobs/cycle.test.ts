@@ -2,10 +2,10 @@ import { describe, it, before, beforeEach, afterEach, after, mock } from "node:t
 import assert from "node:assert/strict";
 import { setupTestDb } from "../helpers/db";
 
-describe("pollCycle re-entrancy guard", () => {
+void describe("pollCycle re-entrancy guard", () => {
   let cleanup: () => void;
 
-  before(() => {
+  void before(() => {
     mock.module("../../src/db/articles", {
       exports: {
         getUncheckedArticles: () => [],
@@ -19,18 +19,18 @@ describe("pollCycle re-entrancy guard", () => {
     });
   });
 
-  after(() => {
+  void after(() => {
     mock.reset();
   });
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
   });
-  afterEach(() => cleanup());
+  void afterEach(() => cleanup());
 
-  it("prevents concurrent execution", async () => {
+  void it("prevents concurrent execution", async () => {
     let pollOnceResolve: () => void;
-    const pollOncePromise = new Promise<void>((resolve) => {
+    const pollOncePromise: Promise<void> = new Promise<void>((resolve) => {
       pollOnceResolve = resolve;
     });
 
@@ -42,11 +42,11 @@ describe("pollCycle re-entrancy guard", () => {
 
     const { pollCycle, isCycleRunning } = await import("../../src/jobs/cycle");
 
-    const first = pollCycle();
+    const first: Promise<void> = pollCycle();
 
     assert.equal(isCycleRunning(), true);
 
-    const secondPromise = pollCycle();
+    const secondPromise: Promise<void> = pollCycle();
 
     pollOnceResolve!();
     await first;

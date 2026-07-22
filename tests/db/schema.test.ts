@@ -4,22 +4,24 @@ import { setupTestDb } from "../helpers/db";
 import { runMigrations } from "../../src/db/schema";
 import { getDb } from "../../src/db/connection";
 
-describe("schema", () => {
+type SqlRow = Record<string, boolean | number | string | null>;
+
+void describe("schema", () => {
   let cleanup: () => void;
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
   });
-  afterEach(() => cleanup());
+  void afterEach(() => cleanup());
 
-  it("runMigrations is idempotent (safe to call twice)", () => {
+  void it("runMigrations is idempotent (safe to call twice)", () => {
     runMigrations();
 
-    const db = getDb();
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as {
-      name: string;
-    }[];
-    const tableNames = tables.map((t) => t.name).sort();
+    const db: ReturnType<typeof getDb> = getDb();
+    const tables: SqlRow[] = db
+      .prepare<[], SqlRow>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all();
+    const tableNames: string[] = tables.map((table) => String(table.name)).sort();
 
     assert.ok(tableNames.includes("articles"));
     assert.ok(tableNames.includes("article_topic_matches"));
@@ -28,8 +30,8 @@ describe("schema", () => {
     assert.ok(tableNames.includes("topics"));
   });
 
-  it("url-dedup migration merges duplicate-URL rows", () => {
-    const db = getDb();
+  void it("url-dedup migration merges duplicate-URL rows", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("DROP INDEX IF EXISTS idx_articles_url").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed-a')").run();
@@ -42,22 +44,22 @@ describe("schema", () => {
 
     runMigrations();
 
-    const rows = db.prepare("SELECT id, url, image_url FROM articles ORDER BY id").all() as {
-      id: number;
-      url: string;
-      image_url: string | null;
-    }[];
+    const rows: SqlRow[] = db
+      .prepare<[], SqlRow>("SELECT id, url, image_url FROM articles ORDER BY id")
+      .all();
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, 1);
 
-    const dupMatch = db.prepare("SELECT * FROM article_topic_matches WHERE article_id = 2").get();
+    const dupMatch: SqlRow | undefined = db
+      .prepare<[], SqlRow>("SELECT * FROM article_topic_matches WHERE article_id = 2")
+      .get();
 
     assert.equal(dupMatch, undefined);
   });
 
-  it("url-dedup folds in image_url from duplicate", () => {
-    const db = getDb();
+  void it("url-dedup folds in image_url from duplicate", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("DROP INDEX IF EXISTS idx_articles_url").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed-c')").run();
@@ -69,13 +71,15 @@ describe("schema", () => {
 
     runMigrations();
 
-    const row = db.prepare("SELECT * FROM articles WHERE id = 1").get() as any;
+    const row: SqlRow = db
+      .prepare<[], SqlRow>("SELECT * FROM articles WHERE id = 1")
+      .get()!;
 
     assert.equal(row.image_url, "https://example.com/img.jpg");
   });
 
-  it("unique index rejects duplicate url after dedup", () => {
-    const db = getDb();
+  void it("unique index rejects duplicate url after dedup", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("DROP INDEX IF EXISTS idx_articles_url").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed-e')").run();

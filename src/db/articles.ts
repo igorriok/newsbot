@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { getDb } from "./connection";
 import { log } from "../utils/log";
 
@@ -14,15 +15,21 @@ export interface Article {
   image_checked: number;
 }
 
-export function insertArticle(
-  feedId: number,
-  guid: string,
-  data: { url?: string; title?: string; summary?: string; published_at?: string; image_url?: string },
-): Article | null {
-  const db = getDb();
+export interface NewArticleData {
+  url?: string;
+  title?: string;
+  summary?: string;
+  published_at?: string;
+  image_url?: string;
+}
+
+export function insertArticle(feedId: number, guid: string, data: NewArticleData): Article | null {
+  const db: ReturnType<typeof getDb> = getDb();
 
   if (data.url) {
-    const existing = db.prepare("SELECT * FROM articles WHERE url = ?").get(data.url) as Article | undefined;
+    const existing: Article | undefined = db
+      .prepare<[string], Article>("SELECT * FROM articles WHERE url = ?")
+      .get(data.url);
 
     if (existing) {
       if (data.image_url && !existing.image_url) {
@@ -42,7 +49,7 @@ export function insertArticle(
   }
 
   try {
-    const info = db
+    const info: Database.RunResult = db
       .prepare(
         "INSERT INTO articles (feed_id, guid, url, title, summary, published_at, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
@@ -56,7 +63,7 @@ export function insertArticle(
         data.image_url ?? null,
       );
     return {
-      id: info.lastInsertRowid as number,
+      id: Number(info.lastInsertRowid),
       feed_id: feedId,
       guid,
       url: data.url ?? null,
@@ -69,7 +76,7 @@ export function insertArticle(
     };
   } catch {
     if (data.image_url) {
-      const result = db
+      const result: Database.RunResult = db
         .prepare("UPDATE articles SET image_url = ? WHERE feed_id = ? AND guid = ? AND image_url IS NULL")
         .run(data.image_url, feedId, guid);
 
@@ -83,21 +90,21 @@ export function insertArticle(
 }
 
 export function updateArticleImage(id: number, imageUrl: string): void {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
 
   db.prepare("UPDATE articles SET image_url = ? WHERE id = ? AND image_url IS NULL").run(imageUrl, id);
 }
 
 export function markImageChecked(id: number): void {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
 
   db.prepare("UPDATE articles SET image_checked = 1 WHERE id = ?").run(id);
 }
 
 export function getArticlesMissingImage(limit: number): Article[] {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
   return db
-    .prepare(
+    .prepare<[number], Article>(
       `
     SELECT * FROM articles
     WHERE image_url IS NULL AND image_checked = 0 AND url IS NOT NULL
@@ -105,30 +112,32 @@ export function getArticlesMissingImage(limit: number): Article[] {
     LIMIT ?
   `,
     )
-    .all(limit) as Article[];
+    .all(limit);
 }
 
 export function getArticleByGuid(feedId: number, guid: string): Article | undefined {
-  const db = getDb();
-  return db.prepare("SELECT * FROM articles WHERE feed_id = ? AND guid = ?").get(feedId, guid) as Article | undefined;
+  const db: ReturnType<typeof getDb> = getDb();
+  return db
+    .prepare<[number, string], Article>("SELECT * FROM articles WHERE feed_id = ? AND guid = ?")
+    .get(feedId, guid);
 }
 
 export function getUncheckedArticles(): Article[] {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
   return db
-    .prepare(
+    .prepare<[], Article>(
       `
     SELECT a.* FROM articles a
     WHERE a.id NOT IN (SELECT DISTINCT article_id FROM article_topic_matches)
   `,
     )
-    .all() as Article[];
+    .all();
 }
 
 export function getArticlesUncheckedForTopic(topicId: number): Article[] {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
   return db
-    .prepare(
+    .prepare<[number], Article>(
       `
     SELECT a.* FROM articles a
     WHERE NOT EXISTS (
@@ -136,5 +145,5 @@ export function getArticlesUncheckedForTopic(topicId: number): Article[] {
     )
   `,
     )
-    .all(topicId) as Article[];
+    .all(topicId);
 }

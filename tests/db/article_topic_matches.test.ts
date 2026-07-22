@@ -4,16 +4,25 @@ import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
 import { upsertMatch, getUnnotifiedMatches, markNotified } from "../../src/db/article_topic_matches";
 
-describe("article_topic_matches", () => {
+interface MatchRow {
+  article_id: number;
+  topic_id: number;
+  matched: number;
+  score: number;
+  notified: number;
+  reasoning: string | null;
+}
+
+void describe("article_topic_matches", () => {
   let cleanup: () => void;
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
   });
-  afterEach(() => cleanup());
+  void afterEach(() => cleanup());
 
-  it("upsertMatch inserts a new match", () => {
-    const db = getDb();
+  void it("upsertMatch inserts a new match", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (1001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed')").run();
@@ -24,16 +33,21 @@ describe("article_topic_matches", () => {
 
     upsertMatch(1, 1, true, 0.9, "good match");
 
-    const row = db.prepare("SELECT * FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1").get() as any;
+    const row: MatchRow | undefined = db
+      .prepare<[], MatchRow>("SELECT * FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
+      .get();
 
     assert.notEqual(row, undefined);
-    assert.equal(row.matched, 1);
-    assert.equal(row.score, 0.9);
-    assert.equal(row.notified, 0);
+
+    if (row) {
+      assert.equal(row.matched, 1);
+      assert.equal(row.score, 0.9);
+      assert.equal(row.notified, 0);
+    }
   });
 
-  it("upsertMatch updates on conflict", () => {
-    const db = getDb();
+  void it("upsertMatch updates on conflict", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (2001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed2')").run();
@@ -45,15 +59,21 @@ describe("article_topic_matches", () => {
     upsertMatch(1, 1, true, 0.9, "good match");
     upsertMatch(1, 1, false, 0.1, "actually no");
 
-    const row = db.prepare("SELECT * FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1").get() as any;
+    const row: MatchRow | undefined = db
+      .prepare<[], MatchRow>("SELECT * FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
+      .get();
 
-    assert.equal(row.matched, 0);
-    assert.equal(row.score, 0.1);
-    assert.equal(row.reasoning, "actually no");
+    assert.notEqual(row, undefined);
+
+    if (row) {
+      assert.equal(row.matched, 0);
+      assert.equal(row.score, 0.1);
+      assert.equal(row.reasoning, "actually no");
+    }
   });
 
-  it("getUnnotifiedMatches only returns matched=1 AND notified=0", () => {
-    const db = getDb();
+  void it("getUnnotifiedMatches only returns matched=1 AND notified=0", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (3001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed3')").run();
@@ -64,15 +84,15 @@ describe("article_topic_matches", () => {
 
     upsertMatch(1, 1, true, 0.9, "good");
 
-    const matches = getUnnotifiedMatches();
+    const matches: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
 
     assert.equal(matches.length, 1);
     assert.equal(matches[0].article_id, 1);
     assert.equal(matches[0].topic_id, 1);
   });
 
-  it("getUnnotifiedMatches excludes notified and unmatched", () => {
-    const db = getDb();
+  void it("getUnnotifiedMatches excludes notified and unmatched", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (4001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed4')").run();
@@ -84,13 +104,13 @@ describe("article_topic_matches", () => {
     upsertMatch(1, 1, true, 0.9, "good");
     markNotified(1, 1);
 
-    const matches = getUnnotifiedMatches();
+    const matches: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
 
     assert.equal(matches.length, 0);
   });
 
-  it("getUnnotifiedMatches returns oldest first", () => {
-    const db = getDb();
+  void it("getUnnotifiedMatches returns oldest first", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (5001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed5')").run();
@@ -105,15 +125,15 @@ describe("article_topic_matches", () => {
     upsertMatch(1, 1, true, 0.9, "first");
     upsertMatch(2, 1, true, 0.8, "second");
 
-    const matches = getUnnotifiedMatches();
+    const matches: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
 
     assert.equal(matches.length, 2);
     assert.equal(matches[0].article_id, 1);
     assert.equal(matches[1].article_id, 2);
   });
 
-  it("markNotified only flips the specified pair", () => {
-    const db = getDb();
+  void it("markNotified only flips the specified pair", () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (6001)").run();
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed6')").run();
@@ -128,7 +148,7 @@ describe("article_topic_matches", () => {
 
     markNotified(1, 1);
 
-    const remaining = getUnnotifiedMatches();
+    const remaining: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
 
     assert.equal(remaining.length, 1);
     assert.equal(remaining[0].topic_id, 2);

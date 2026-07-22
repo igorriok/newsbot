@@ -4,7 +4,7 @@ import prettier from "eslint-config-prettier";
 
 const eslintConfig = defineConfig([
   ...tseslint.configs.recommendedTypeChecked,
-  globalIgnores(["dist/**", "node_modules/**", "coverage/**"]),
+  globalIgnores(["dist/**", "node_modules/**", "coverage/**", "eslint.config.mjs"]),
   {
     languageOptions: {
       parserOptions: {

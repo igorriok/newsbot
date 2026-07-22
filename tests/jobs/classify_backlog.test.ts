@@ -3,24 +3,24 @@ import assert from "node:assert/strict";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
 
-describe("classifyBacklogForNewTopic", () => {
+void describe("classifyBacklogForNewTopic", () => {
   let cleanup: () => void;
-  const dispatchNotifications = mock.fn(() => Promise.resolve());
+  const dispatchNotifications: ReturnType<typeof mock.fn> = mock.fn(() => Promise.resolve());
 
-  before(() => {
+  void before(() => {
     mock.module("../../src/notifications/dispatcher", {
       exports: { dispatchNotifications },
     });
   });
 
-  after(() => {
+  void after(() => {
     mock.reset();
   });
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
 
-    const db = getDb();
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed')").run();
     db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (10001)").run();
@@ -30,10 +30,10 @@ describe("classifyBacklogForNewTopic", () => {
     dispatchNotifications.mock.resetCalls();
   });
 
-  afterEach(() => cleanup());
+  void afterEach(() => cleanup());
 
-  it("only classifies articles unchecked for that specific topic", async () => {
-    const db = getDb();
+  void it("only classifies articles unchecked for that specific topic", async () => {
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO article_topic_matches (article_id, topic_id, matched) VALUES (1, 1, 1)").run();
 

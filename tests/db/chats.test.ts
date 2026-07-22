@@ -1,49 +1,49 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { setupTestDb } from "../helpers/db";
-import { upsertChat, getChatByTelegramId } from "../../src/db/chats";
+import { type Chat, upsertChat, getChatByTelegramId } from "../../src/db/chats";
 
-describe("chats", () => {
+void describe("chats", () => {
   let cleanup: () => void;
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
   });
-  afterEach(() => cleanup());
+  void afterEach(() => cleanup());
 
-  it("upsertChat inserts a new chat and returns it", () => {
-    const chat = upsertChat(12345);
+  void it("upsertChat inserts a new chat and returns it", () => {
+    const chat: Chat = upsertChat(12345);
 
     assert.equal(chat.telegram_chat_id, 12345);
     assert.ok(chat.id > 0);
   });
 
-  it("upsertChat is idempotent", () => {
-    const a = upsertChat(99999);
-    const b = upsertChat(99999);
+  void it("upsertChat is idempotent", () => {
+    const first: Chat = upsertChat(99999);
+    const second: Chat = upsertChat(99999);
 
-    assert.equal(a.id, b.id);
-    assert.equal(a.telegram_chat_id, b.telegram_chat_id);
+    assert.equal(first.id, second.id);
+    assert.equal(first.telegram_chat_id, second.telegram_chat_id);
   });
 
-  it("upsertChat returns the same row on second call", () => {
-    const a = upsertChat(55555);
-    const b = upsertChat(55555);
+  void it("upsertChat returns the same row on second call", () => {
+    const first: Chat = upsertChat(55555);
+    const second: Chat = upsertChat(55555);
 
-    assert.equal(a.id, b.id);
-    assert.equal(a.telegram_chat_id, b.telegram_chat_id);
+    assert.equal(first.id, second.id);
+    assert.equal(first.telegram_chat_id, second.telegram_chat_id);
   });
 
-  it("getChatByTelegramId returns undefined for missing chat", () => {
-    const chat = getChatByTelegramId(999999);
+  void it("getChatByTelegramId returns undefined for missing chat", () => {
+    const chat: Chat | undefined = getChatByTelegramId(999999);
 
     assert.equal(chat, undefined);
   });
 
-  it("getChatByTelegramId returns the chat when it exists", () => {
+  void it("getChatByTelegramId returns the chat when it exists", () => {
     upsertChat(77777);
 
-    const chat = getChatByTelegramId(77777);
+    const chat: Chat | undefined = getChatByTelegramId(77777);
 
     assert.notEqual(chat, undefined);
     assert.equal(chat!.telegram_chat_id, 77777);

@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { getDb } from "./connection";
 
 export interface Feed {
@@ -10,11 +11,17 @@ export interface Feed {
   healthy: number;
 }
 
+export interface FeedUrlRef {
+  id: number;
+  url: string;
+}
+
 export function insertFeed(url: string): Feed {
-  const db = getDb();
-  const info = db.prepare("INSERT INTO feeds (url) VALUES (?)").run(url);
+  const db: ReturnType<typeof getDb> = getDb();
+  const info: Database.RunResult = db.prepare("INSERT INTO feeds (url) VALUES (?)").run(url);
+
   return {
-    id: info.lastInsertRowid as number,
+    id: Number(info.lastInsertRowid),
     url,
     title: null,
     last_fetched_at: null,
@@ -25,28 +32,29 @@ export function insertFeed(url: string): Feed {
 }
 
 export function getFeedByUrl(url: string): Feed | undefined {
-  const db = getDb();
-  return db.prepare("SELECT * FROM feeds WHERE url = ?").get(url) as Feed | undefined;
+  const db: ReturnType<typeof getDb> = getDb();
+  return db.prepare<[string], Feed>("SELECT * FROM feeds WHERE url = ?").get(url);
 }
 
 export function getFeedById(id: number): Feed | undefined {
-  const db = getDb();
-  return db.prepare("SELECT * FROM feeds WHERE id = ?").get(id) as Feed | undefined;
+  const db: ReturnType<typeof getDb> = getDb();
+  return db.prepare<[number], Feed>("SELECT * FROM feeds WHERE id = ?").get(id);
 }
 
 export function getAllFeeds(): Feed[] {
-  const db = getDb();
-  return db.prepare("SELECT * FROM feeds").all() as Feed[];
+  const db: ReturnType<typeof getDb> = getDb();
+  return db.prepare<[], Feed>("SELECT * FROM feeds").all();
 }
 
-export function getAllDistinctFeedUrls(): { id: number; url: string }[] {
-  const db = getDb();
-  return db.prepare("SELECT id, url FROM feeds").all() as { id: number; url: string }[];
+export function getAllDistinctFeedUrls(): FeedUrlRef[] {
+  const db: ReturnType<typeof getDb> = getDb();
+  return db.prepare<[], FeedUrlRef>("SELECT id, url FROM feeds").all();
 }
 
 export function deleteFeed(id: number): boolean {
-  const db = getDb();
-  const info = db.prepare("DELETE FROM feeds WHERE id = ?").run(id);
+  const db: ReturnType<typeof getDb> = getDb();
+  const info: Database.RunResult = db.prepare("DELETE FROM feeds WHERE id = ?").run(id);
+
   return info.changes > 0;
 }
 
@@ -60,9 +68,9 @@ export function updateFeedMeta(
     healthy?: number;
   },
 ): void {
-  const db = getDb();
+  const db: ReturnType<typeof getDb> = getDb();
   const sets: string[] = [];
-  const vals: any[] = [];
+  const vals: (string | number | null)[] = [];
 
   if (meta.title !== undefined) {
     sets.push("title = ?");

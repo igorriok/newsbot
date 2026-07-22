@@ -1,11 +1,14 @@
 import fs from "fs";
 import path from "path";
-import os from "os";
+import * as nodeOs from "os";
 import { resetDbForTests, getDb } from "../../src/db/connection";
 import { runMigrations } from "../../src/db/schema";
 
 export function setupTestDb(): () => void {
-  const tmpFile = path.join(os.tmpdir(), `newsbot-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
+  const tmpFile: string = path.join(
+    nodeOs.tmpdir(),
+    `newsbot-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+  );
 
   resetDbForTests(tmpFile);
   runMigrations();
@@ -13,10 +16,14 @@ export function setupTestDb(): () => void {
   return () => {
     try {
       getDb().close();
-    } catch {}
+    } catch {
+      // ignore close error
+    }
 
     try {
       fs.unlinkSync(tmpFile);
-    } catch {}
+    } catch {
+      // ignore unlink error
+    }
   };
 }

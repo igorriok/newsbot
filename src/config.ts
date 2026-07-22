@@ -3,6 +3,7 @@ import { z } from "zod";
 
 dotenv.config();
 
+// eslint-disable-next-line @typescript-eslint/typedef -- z.ZodTypeAny would erase the field types z.infer<> needs below
 const configSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   OPENCODE_SERVER_URL: z.string().url().default("http://localhost:4096"),
@@ -14,17 +15,17 @@ const configSchema = z.object({
   ADMIN_TELEGRAM_IDS: z
     .string()
     .default("")
-    .transform((s) =>
-      s
+    .transform((str) =>
+      str
         .split(",")
         .map((part) => part.trim())
         .filter(Boolean)
         .map((part) => {
-          const n = Number(part);
-          if (!Number.isInteger(n)) throw new Error(`Invalid ADMIN_TELEGRAM_IDS entry: "${part}"`);
-          return n;
+          const num: number = Number(part);
+          if (!Number.isInteger(num)) throw new Error(`Invalid ADMIN_TELEGRAM_IDS entry: "${part}"`);
+          return num;
         }),
     ),
 });
 
-export const config = configSchema.parse(process.env);
+export const config: z.infer<typeof configSchema> = configSchema.parse(process.env);

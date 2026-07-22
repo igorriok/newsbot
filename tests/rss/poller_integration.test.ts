@@ -1,41 +1,42 @@
 import { describe, it, beforeEach, afterEach, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import { setupTestDb } from "../helpers/db";
-import { insertFeed, getFeedById, getAllDistinctFeedUrls } from "../../src/db/feeds";
+import { insertFeed, getFeedById } from "../../src/db/feeds";
 import { getDb } from "../../src/db/connection";
 
+type SqlRow = Record<string, boolean | number | string | null>;
+
 function rssXml(items: { guid: string; link: string; title: string }[]): string {
-  const itemXml = items
+  const itemXml: string = items
     .map(
-      (i) => `
+      (item) => `
     <item>
-      <guid>${i.guid}</guid>
-      <link>${i.link}</link>
-      <title>${i.title}</title>
+      <guid>${item.guid}</guid>
+      <link>${item.link}</link>
+      <title>${item.title}</title>
     </item>`,
     )
     .join("\n");
+
   return `<?xml version="1.0"?><rss version="2.0"><channel><title>Test Feed</title>${itemXml}</channel></rss>`;
 }
 
-describe("pollOnce", () => {
+void describe("pollOnce", () => {
   let cleanup: () => void;
-  let fetchMock: any;
+  let fetchMock: ReturnType<typeof mock.fn>;
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
   });
-  afterEach(() => cleanup());
-  after(() => {
+  void afterEach(() => cleanup());
+  void after(() => {
     mock.reset();
   });
 
-  it("a 304 response leaves etag/last_modified untouched and inserts nothing", async () => {
-    const feed = insertFeed("https://example.com/feed-304");
+  void it("a 304 response leaves etag/last_modified untouched and inserts nothing", async () => {
+    const feed: ReturnType<typeof insertFeed> = insertFeed("https://example.com/feed-304");
 
     getDb().prepare("UPDATE feeds SET etag = 'old-etag', last_modified = 'old-lm' WHERE id = ?").run(feed.id);
-
-    const fetchCalled = false;
 
     fetchMock = mock.fn(() =>
       Promise.resolve({
@@ -52,22 +53,24 @@ describe("pollOnce", () => {
 
     await pollOnce();
 
-    const updated = getFeedById(feed.id);
+    const updated: ReturnType<typeof getFeedById> = getFeedById(feed.id);
 
     assert.equal(updated!.etag, "old-etag");
     assert.equal(updated!.last_modified, "old-lm");
 
-    const articles = getDb().prepare("SELECT * FROM articles WHERE feed_id = ?").all(feed.id) as any[];
+    const articles: SqlRow[] = getDb()
+      .prepare<[], SqlRow>("SELECT * FROM articles WHERE feed_id = ?")
+      .all(feed.id);
 
     assert.equal(articles.length, 0);
   });
 
-  it("a 200 response inserts new articles and marks feed healthy", async () => {
-    const feed = insertFeed("https://example.com/feed-200");
+  void it("a 200 response inserts new articles and marks feed healthy", async () => {
+    const feed: ReturnType<typeof insertFeed> = insertFeed("https://example.com/feed-200");
 
     getDb().prepare("UPDATE feeds SET healthy = 0 WHERE id = ?").run(feed.id);
 
-    const xml = rssXml([
+    const xml: string = rssXml([
       { guid: "g1", link: "https://ex.com/a", title: "Article A" },
       { guid: "g2", link: "https://ex.com/b", title: "Article B" },
     ]);
@@ -86,22 +89,22 @@ describe("pollOnce", () => {
 
     await pollOnce();
 
-    const updated = getFeedById(feed.id);
+    const updated: ReturnType<typeof getFeedById> = getFeedById(feed.id);
 
     assert.equal(updated!.healthy, 1);
     assert.equal(updated!.etag, '"new-etag"');
 
-    const articles = getDb()
-      .prepare("SELECT guid, title FROM articles WHERE feed_id = ? ORDER BY id")
-      .all(feed.id) as any[];
+    const articles: SqlRow[] = getDb()
+      .prepare<[], SqlRow>("SELECT guid, title FROM articles WHERE feed_id = ? ORDER BY id")
+      .all(feed.id);
 
     assert.equal(articles.length, 2);
     assert.equal(articles[0].guid, "g1");
     assert.equal(articles[1].guid, "g2");
   });
 
-  it("a fetch failure marks the feed unhealthy and does not throw", async () => {
-    const feed = insertFeed("https://example.com/feed-fail");
+  void it("a fetch failure marks the feed unhealthy and does not throw", async () => {
+    const feed: ReturnType<typeof insertFeed> = insertFeed("https://example.com/feed-fail");
 
     fetchMock = mock.fn(() => Promise.reject(new Error("network error")));
     mock.method(global, "fetch", fetchMock);
@@ -110,11 +113,13 @@ describe("pollOnce", () => {
 
     await pollOnce();
 
-    const updated = getFeedById(feed.id);
+    const updated: ReturnType<typeof getFeedById> = getFeedById(feed.id);
 
     assert.equal(updated!.healthy, 0);
 
-    const articles = getDb().prepare("SELECT * FROM articles WHERE feed_id = ?").all(feed.id) as any[];
+    const articles: SqlRow[] = getDb()
+      .prepare<[], SqlRow>("SELECT * FROM articles WHERE feed_id = ?")
+      .all(feed.id);
 
     assert.equal(articles.length, 0);
   });

@@ -9,7 +9,7 @@ async function main(): Promise<void> {
   runMigrations();
   log("info", "Database migrations complete");
 
-  bot.catch((err) => {
+  bot.catch((err: { message: string }) => {
     log("error", `Bot error: ${err.message}`);
   });
 
@@ -22,18 +22,20 @@ async function main(): Promise<void> {
         log("info", "Bot started, polling for updates...");
       },
     })
-    .catch((err: any) => {
+    .catch((err: { message: string }) => {
       log("error", `Bot failed to start: ${err.message}`);
       process.exit(1);
     });
 
   cron.schedule(config.POLL_CRON_SCHEDULE, () => {
-    pollCycle().catch((err) => log("error", `Poll cycle failed: ${err.message}`));
+    void pollCycle().catch((err: { message: string }) =>
+      log("error", `Poll cycle failed: ${err.message}`),
+    );
   });
 
   await pollCycle();
 
-  const shutdown = async () => {
+  const shutdown: () => void = () => {
     log("info", "Shutting down...");
     process.exit(0);
   };
@@ -42,7 +44,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 }
 
-main().catch((err) => {
+main().catch((err: { message: string }) => {
   log("error", `Fatal: ${err.message}`);
   process.exit(1);
 });

@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
 
-describe("dispatchNotifications", () => {
-  let cleanup: () => void;
-  const sendMessage = mock.fn(() => Promise.resolve());
-  const sendPhoto = mock.fn(() => Promise.resolve());
+type SqlRow = Record<string, boolean | number | string | null>;
 
-  before(() => {
+void describe("dispatchNotifications", () => {
+  let cleanup: () => void;
+  const sendMessage: ReturnType<typeof mock.fn> = mock.fn(() => Promise.resolve());
+  const sendPhoto: ReturnType<typeof mock.fn> = mock.fn(() => Promise.resolve());
+
+  void before(() => {
     mock.module("../../src/bot", {
       exports: {
         bot: { api: { sendMessage, sendPhoto } },
@@ -16,14 +18,14 @@ describe("dispatchNotifications", () => {
     });
   });
 
-  after(() => {
+  void after(() => {
     mock.reset();
   });
 
-  beforeEach(() => {
+  void beforeEach(() => {
     cleanup = setupTestDb();
 
-    const db = getDb();
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare("INSERT INTO chats (id, telegram_chat_id) VALUES (1, 10001)").run();
     db.prepare("INSERT INTO chats (id, telegram_chat_id) VALUES (2, 10002)").run();
@@ -55,12 +57,12 @@ describe("dispatchNotifications", () => {
     sendPhoto.mock.mockImplementation(() => Promise.resolve());
   });
 
-  afterEach(() => cleanup());
+  void afterEach(() => cleanup());
 
-  it("sends at most one notification per chat per cycle", async () => {
+  void it("sends at most one notification per chat per cycle", async () => {
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db = getDb();
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 1, 1, 0.8, datetime('now'), 0)",
@@ -73,23 +75,23 @@ describe("dispatchNotifications", () => {
 
     assert.equal(sendMessage.mock.callCount(), 1);
 
-    const notified1 = db
-      .prepare("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
-      .get() as any;
+    const notified1: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
+      .get()!;
 
     assert.equal(notified1.notified, 1);
 
-    const notified3 = db
-      .prepare("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 3")
-      .get() as any;
+    const notified3: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 3")
+      .get()!;
 
     assert.equal(notified3.notified, 0);
   });
 
-  it("skips and marks notified when chat_id no longer resolves", async () => {
+  void it("skips and marks notified when chat_id no longer resolves", async () => {
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db = getDb();
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 5, 1, 0.8, datetime('now'), 0)",
@@ -97,19 +99,19 @@ describe("dispatchNotifications", () => {
 
     await dispatchNotifications();
 
-    const row = db
-      .prepare("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 5")
-      .get() as any;
+    const row: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 5")
+      .get()!;
 
     assert.equal(row.notified, 1);
   });
 
-  it("sendPhoto failure falls back to sendMessage after retrying via upload", async () => {
+  void it("sendPhoto failure falls back to sendMessage after retrying via upload", async () => {
     sendPhoto.mock.mockImplementation(() => Promise.reject(new Error("photo failed")));
 
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db = getDb();
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (4, 4, 1, 0.9, datetime('now'), 0)",
@@ -121,8 +123,8 @@ describe("dispatchNotifications", () => {
     assert.equal(sendMessage.mock.callCount(), 1);
   });
 
-  it("retries sendPhoto via upload when the URL-based attempt fails, without falling back to text", async () => {
-    let calls = 0;
+  void it("retries sendPhoto via upload when the URL-based attempt fails, without falling back to text", async () => {
+    let calls: number = 0;
     sendPhoto.mock.mockImplementation(() => {
       calls++;
       return calls === 1 ? Promise.reject(new Error("wrong type of the web page content")) : Promise.resolve();
@@ -130,7 +132,7 @@ describe("dispatchNotifications", () => {
 
     const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
 
-    const db = getDb();
+    const db: ReturnType<typeof getDb> = getDb();
 
     db.prepare(
       "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (4, 2, 1, 0.9, datetime('now'), 0)",
