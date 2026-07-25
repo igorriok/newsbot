@@ -37,7 +37,7 @@ bot.use(async (ctx, next) => {
     return;
   }
 
-  const chat: Chat = upsertChat(ctx.chat.id);
+  upsertChat(ctx.chat.id);
   await next();
 });
 

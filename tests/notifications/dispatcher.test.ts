@@ -1,5 +1,6 @@
 import { describe, it, before, beforeEach, afterEach, after, mock } from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
 
@@ -111,11 +112,13 @@ void describe("dispatchNotifications", () => {
     const notified1: SqlRow = db
       .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
       .get()!;
+
     assert.equal(notified1.notified, 1);
 
     const notified2: SqlRow = db
       .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 2")
       .get()!;
+
     assert.equal(notified2.notified, 1);
   });
 

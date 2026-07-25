@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import { setupTestDb } from "../helpers/db";
 import { runMigrations } from "../../src/db/schema";
 import { getDb } from "../../src/db/connection";

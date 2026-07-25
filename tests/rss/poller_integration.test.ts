@@ -59,7 +59,7 @@ void describe("pollOnce", () => {
     assert.equal(updated!.last_modified, "old-lm");
 
     const articles: SqlRow[] = getDb()
-      .prepare<[], SqlRow>("SELECT * FROM articles WHERE feed_id = ?")
+      .prepare<[number], SqlRow>("SELECT * FROM articles WHERE feed_id = ?")
       .all(feed.id);
 
     assert.equal(articles.length, 0);
@@ -95,7 +95,7 @@ void describe("pollOnce", () => {
     assert.equal(updated!.etag, '"new-etag"');
 
     const articles: SqlRow[] = getDb()
-      .prepare<[], SqlRow>("SELECT guid, title FROM articles WHERE feed_id = ? ORDER BY id")
+      .prepare<[number], SqlRow>("SELECT guid, title FROM articles WHERE feed_id = ? ORDER BY id")
       .all(feed.id);
 
     assert.equal(articles.length, 2);
@@ -118,7 +118,7 @@ void describe("pollOnce", () => {
     assert.equal(updated!.healthy, 0);
 
     const articles: SqlRow[] = getDb()
-      .prepare<[], SqlRow>("SELECT * FROM articles WHERE feed_id = ?")
+      .prepare<[number], SqlRow>("SELECT * FROM articles WHERE feed_id = ?")
       .all(feed.id);
 
     assert.equal(articles.length, 0);

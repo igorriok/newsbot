@@ -5,13 +5,10 @@ import { type ClassifyResult } from "../../src/classifier/client";
 
 const BASE: string = config.OPENCODE_SERVER_URL;
 
-type MockResponseJson =
-  | string
-  | number
-  | boolean
-  | null
-  | MockResponseJson[]
-  | Record<string, MockResponseJson>;
+type MockResponseJson = string | number | boolean | null | MockResponseJson[] | MockResponseJsonObject;
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- interface indirection is required to break the Record<> circular type alias reference below
+interface MockResponseJsonObject extends Record<string, MockResponseJson> {}
 
 function makeFetchMock(
   handler: (

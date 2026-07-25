@@ -1,5 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
 import {
@@ -73,7 +74,7 @@ void describe("articles", () => {
     assert.equal(duplicate, null);
 
     const row: SqlRow = getDb()
-      .prepare<[], SqlRow>("SELECT * FROM articles WHERE feed_id = ? AND guid = ?")
+      .prepare<[number, string], SqlRow>("SELECT * FROM articles WHERE feed_id = ? AND guid = ?")
       .get(feed1Id, "guid-img")!;
 
     assert.equal(row.image_url, "https://example.com/img.jpg");
@@ -95,7 +96,7 @@ void describe("articles", () => {
 
     assert.equal(secondArticle, null);
 
-    const rows: SqlRow[] = getDb().prepare<[], SqlRow>("SELECT * FROM articles WHERE url = ?").all(url);
+    const rows: SqlRow[] = getDb().prepare<[string], SqlRow>("SELECT * FROM articles WHERE url = ?").all(url);
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0].id, firstArticle!.id);
@@ -120,7 +121,7 @@ void describe("articles", () => {
 
     assert.equal(secondArticle, null);
 
-    const row: SqlRow = getDb().prepare<[], SqlRow>("SELECT * FROM articles WHERE url = ?").get(url)!;
+    const row: SqlRow = getDb().prepare<[string], SqlRow>("SELECT * FROM articles WHERE url = ?").get(url)!;
 
     assert.equal(row.image_url, "https://example.com/img.jpg");
   });

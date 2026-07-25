@@ -1,5 +1,6 @@
 import { describe, it, before, beforeEach, afterEach, after, mock } from "node:test";
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
 
