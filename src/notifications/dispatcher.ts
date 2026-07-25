@@ -1,5 +1,5 @@
 import { InputFile } from "grammy";
-import { getUnnotifiedMatches, markNotified, UnnotifiedMatch } from "../db/article_topic_matches";
+import { getUnnotifiedMatches, markNotifiedForChat, UnnotifiedMatch } from "../db/article_topic_matches";
 import { getDb } from "../db/connection";
 import { bot } from "../bot";
 import { log } from "../utils/log";
@@ -16,7 +16,7 @@ async function sendOne(match: UnnotifiedMatch): Promise<void> {
     .get(match.chat_id);
 
   if (!chat) {
-    markNotified(match.article_id, match.topic_id);
+    markNotifiedForChat(match.article_id, match.chat_id);
     log(
       "warn",
       `Chat ${match.chat_id} not found, skipping notification for article ${match.article_id}, topic ${match.topic_id}`,
@@ -67,7 +67,7 @@ async function sendOne(match: UnnotifiedMatch): Promise<void> {
       });
     }
 
-    markNotified(match.article_id, match.topic_id);
+    markNotifiedForChat(match.article_id, match.chat_id);
     log("info", `Sent notification to chat ${match.chat_id} for article ${match.article_id}, topic ${match.topic_id}`);
   } catch (err: unknown) {
     log(

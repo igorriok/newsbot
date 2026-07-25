@@ -75,6 +75,9 @@ void describe("dispatchNotifications", () => {
 
     assert.equal(sendMessage.mock.callCount(), 1);
 
+    // Both topic 1 and topic 3 belong to chat 1, so a single send for article 1 must
+    // mark every one of that chat's matches notified — otherwise the sibling match
+    // resurfaces as a duplicate send on the next cycle.
     const notified1: SqlRow = db
       .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
       .get()!;
@@ -85,7 +88,35 @@ void describe("dispatchNotifications", () => {
       .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 3")
       .get()!;
 
-    assert.equal(notified3.notified, 0);
+    assert.equal(notified3.notified, 1);
+  });
+
+  void it("does not mark a different chat's match on the same article as notified", async () => {
+    const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
+
+    const db: Database.Database = getDb();
+
+    // topic 1 -> chat 1, topic 2 -> chat 2, both matching article 1
+    db.prepare(
+      "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 1, 1, 0.8, datetime('now'), 0)",
+    ).run();
+    db.prepare(
+      "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 2, 1, 0.7, datetime('now'), 0)",
+    ).run();
+
+    await dispatchNotifications();
+
+    assert.equal(sendMessage.mock.callCount(), 2);
+
+    const notified1: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 1")
+      .get()!;
+    assert.equal(notified1.notified, 1);
+
+    const notified2: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 1 AND topic_id = 2")
+      .get()!;
+    assert.equal(notified2.notified, 1);
   });
 
   void it("skips and marks notified when chat_id no longer resolves", async () => {

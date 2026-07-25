@@ -69,3 +69,20 @@ export function markNotified(articleId: number, topicId: number): void {
     topicId,
   );
 }
+
+// Marks every matching topic this chat has for the article as notified, not just the
+// one that triggered the send — otherwise a sibling topic match for the same chat
+// resurfaces as a duplicate notification on a later poll cycle.
+export function markNotifiedForChat(articleId: number, chatId: number): void {
+  const db: Database.Database = getDb();
+
+  db.prepare(
+    `
+    UPDATE article_topic_matches
+    SET notified = 1
+    WHERE article_id = ?
+      AND notified = 0
+      AND topic_id IN (SELECT id FROM topics WHERE chat_id = ?)
+  `,
+  ).run(articleId, chatId);
+}
