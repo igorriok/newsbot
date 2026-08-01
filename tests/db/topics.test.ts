@@ -52,7 +52,10 @@ void describe("topics", () => {
 
     const topics: Topic[] = getTopicsForChat(chatId);
 
-    assert.equal(topics.find((topicMatch) => topicMatch.id === topic.id), undefined);
+    assert.equal(
+      topics.find((topicMatch) => topicMatch.id === topic.id),
+      undefined,
+    );
   });
 
   void it("getTopicsByChatIds returns empty array for empty input", () => {

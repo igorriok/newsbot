@@ -1,7 +1,7 @@
 {
   "name": "newsbot",
   "version": "1.0.0",
-  "description": "Telegram RSS News Bot with opencode LLM classifier",
+  "description": "Telegram RSS News Bot with DeepSeek LLM classifier",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -19,7 +19,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@opencode-ai/sdk": "^1.18.4",
     "better-sqlite3": "^13.0.1",
     "dotenv": "^17.4.2",
     "grammy": "^1.45.1",

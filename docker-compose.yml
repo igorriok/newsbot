@@ -3,10 +3,6 @@ services:
     build: .
     env_file:
       - .env
-    environment:
-      - OPENCODE_SERVER_URL=http://host.docker.internal:4096
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/app/data
     restart: unless-stopped

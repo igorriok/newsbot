@@ -6,9 +6,9 @@ dotenv.config();
 // eslint-disable-next-line @typescript-eslint/typedef -- z.ZodTypeAny would erase the field types z.infer<> needs below
 const configSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
-  OPENCODE_SERVER_URL: z.string().url().default("http://localhost:4096"),
-  OPENCODE_PROVIDER_ID: z.string().default("opencode-go"),
-  OPENCODE_MODEL_ID: z.string().default("deepseek-v4-flash"),
+  DEEPSEEK_API_KEY: z.string().min(1),
+  DEEPSEEK_MODEL_ID: z.string().default("deepseek-v4-flash"),
+  DEEPSEEK_BASE_URL: z.string().url().default("https://api.deepseek.com"),
   DATABASE_PATH: z.string().default("./data/newsbot.db"),
   POLL_CRON_SCHEDULE: z.string().default("*/10 * * * *"),
   MIN_RELEVANCE_SCORE: z.coerce.number().min(0).max(1).default(0.5),

@@ -28,9 +28,7 @@ async function main(): Promise<void> {
     });
 
   cron.schedule(config.POLL_CRON_SCHEDULE, () => {
-    void pollCycle().catch((err: { message: string }) =>
-      log("error", `Poll cycle failed: ${err.message}`),
-    );
+    void pollCycle().catch((err: { message: string }) => log("error", `Poll cycle failed: ${err.message}`));
   });
 
   await pollCycle();

@@ -2,6 +2,73 @@ import { config } from "../config";
 import { log } from "../utils/log";
 import { z } from "zod";
 
+type DeepSeekMessageSchemaType = z.ZodObject<{
+  content: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+}>;
+
+const DeepSeekMessageSchema: DeepSeekMessageSchemaType = z
+  .object({
+    content: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+type DeepSeekChoiceSchemaType = z.ZodObject<{
+  message: DeepSeekMessageSchemaType;
+}>;
+
+const DeepSeekChoiceSchema: DeepSeekChoiceSchemaType = z
+  .object({
+    message: DeepSeekMessageSchema,
+  })
+  .passthrough();
+
+type DeepSeekUsageSchemaType = z.ZodObject<{
+  prompt_tokens: z.ZodNumber;
+  completion_tokens: z.ZodNumber;
+  total_tokens: z.ZodNumber;
+}>;
+
+const DeepSeekUsageSchema: DeepSeekUsageSchemaType = z.object({
+  prompt_tokens: z.number(),
+  completion_tokens: z.number(),
+  total_tokens: z.number(),
+});
+
+type DeepSeekUsage = z.infer<typeof DeepSeekUsageSchema>;
+
+type DeepSeekChatResponseSchemaType = z.ZodObject<{
+  choices: z.ZodArray<DeepSeekChoiceSchemaType>;
+  usage: z.ZodOptional<z.ZodUnknown>;
+}>;
+
+const DeepSeekChatResponseSchema: DeepSeekChatResponseSchemaType = z.object({
+  choices: z.array(DeepSeekChoiceSchema),
+  usage: z.unknown().optional(),
+});
+
+type DeepSeekChatResponse = z.infer<typeof DeepSeekChatResponseSchema>;
+
+type DeepSeekErrorSchemaType = z.ZodObject<{
+  message: z.ZodString;
+}>;
+
+type DeepSeekErrorResponseSchemaType = z.ZodObject<{
+  error: z.ZodOptional<z.ZodNullable<DeepSeekErrorSchemaType>>;
+}>;
+
+const DeepSeekErrorResponseSchema: DeepSeekErrorResponseSchemaType = z
+  .object({
+    error: z
+      .object({
+        message: z.string(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
+type DeepSeekErrorResponse = z.infer<typeof DeepSeekErrorResponseSchema>;
+
 type MatchSchemaType = z.ZodObject<{
   topic_id: z.ZodNumber;
   relevant: z.ZodBoolean;
@@ -44,9 +111,7 @@ Respond with strict JSON only — no markdown, no code fences, no extra text.
 Format: {"matches": [{"topic_id": <int>, "relevant": <bool>, "score": <0.0-1.0>, "reason": "<brief explanation>"}]}`;
 
 function buildPrompt(articleTitle: string, articleSummary: string | null, topics: TopicInfo[]): string {
-  const topicLines: string = topics
-    .map((topic) => `  - id: ${topic.id}, phrase: "${topic.phrase}"`)
-    .join("\n");
+  const topicLines: string = topics.map((topic) => `  - id: ${topic.id}, phrase: "${topic.phrase}"`).join("\n");
   return `Article title: ${articleTitle}
 Article summary: ${articleSummary ?? "(no summary)"}
 
@@ -56,141 +121,80 @@ ${topicLines}
 Respond with strict JSON only.`;
 }
 
-interface OpenCodeSessionResponse {
-  id: string;
-}
-
-interface OpenCodeTokenInfo {
-  input: number;
-  output: number;
-  reasoning: number;
-}
-
-type SessionResponseSchemaType = z.ZodObject<{ id: z.ZodString }>;
-
-const SessionResponseSchema: SessionResponseSchemaType = z.object({ id: z.string() });
-
-type TokenInfoSchemaType = z.ZodObject<{
-  input: z.ZodNumber;
-  output: z.ZodNumber;
-  reasoning: z.ZodNumber;
-}>;
-
-const TokenInfoSchema: TokenInfoSchemaType = z.object({
-  input: z.number(),
-  output: z.number(),
-  reasoning: z.number(),
-});
-
-interface OpenCodeMessageInfo {
-  tokens?: OpenCodeTokenInfo;
-}
-
-interface MessagePart {
-  type?: string;
-  text?: string;
-}
-
-interface OpenCodeMessageResponse {
-  info?: OpenCodeMessageInfo;
-  parts?: MessagePart[];
-}
-
-type MessagePartSchemaType = z.ZodObject<{
-  type: z.ZodOptional<z.ZodString>;
-  text: z.ZodOptional<z.ZodString>;
-}>;
-
-const MessagePartSchema: MessagePartSchemaType = z.object({
-  type: z.string().optional(),
-  text: z.string().optional(),
-});
-
-type InfoSchemaType = z.ZodObject<{
-  tokens: z.ZodOptional<typeof TokenInfoSchema>;
-}>;
-
-type MessageResponseSchemaType = z.ZodObject<{
-  info: z.ZodOptional<InfoSchemaType>;
-  parts: z.ZodOptional<z.ZodArray<typeof MessagePartSchema>>;
-}>;
-
-const MessageResponseSchema: MessageResponseSchemaType = z.object({
-  info: z.object({ tokens: TokenInfoSchema.optional() }).optional(),
-  parts: z.array(MessagePartSchema).optional(),
-});
-
-async function callOpenCode(prompt: string, articleId: number): Promise<string | null> {
-  let sessionId: string | null = null;
-
+async function callDeepSeek(prompt: string, articleId: number): Promise<string | null> {
   try {
-    log("debug", `[article ${articleId}] Creating opencode session`);
-
-    const sessionRes: Response = await fetch(`${config.OPENCODE_SERVER_URL}/session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "newsbot-classifier" }),
-    });
-
-    if (!sessionRes.ok) {
-      log("error", `OpenCode session create returned ${sessionRes.status}: ${await sessionRes.text()}`);
-      return null;
-    }
-
-    const session: OpenCodeSessionResponse = SessionResponseSchema.parse(await sessionRes.json());
-
-    sessionId = session.id;
-
     log(
-      "info",
-      `[article ${articleId}] Sending classification request to opencode (session ${sessionId}, model ${config.OPENCODE_PROVIDER_ID}/${config.OPENCODE_MODEL_ID})`,
+      "debug",
+      `[article ${articleId}] Sending classification request to DeepSeek (model ${config.DEEPSEEK_MODEL_ID})`,
     );
 
-    const messageRes: Response = await fetch(`${config.OPENCODE_SERVER_URL}/session/${sessionId}/message`, {
+    const response: Response = await fetch(`${config.DEEPSEEK_BASE_URL}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.DEEPSEEK_API_KEY}`,
+      },
       body: JSON.stringify({
-        model: { providerID: config.OPENCODE_PROVIDER_ID, modelID: config.OPENCODE_MODEL_ID },
-        tools: { "*": false },
-        system: SYSTEM_PROMPT,
-        parts: [{ type: "text", text: prompt }],
+        model: config.DEEPSEEK_MODEL_ID,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        stream: false,
+        response_format: { type: "json_object" },
       }),
     });
 
-    if (!messageRes.ok) {
-      log("error", `OpenCode message returned ${messageRes.status}: ${await messageRes.text()}`);
+    if (!response.ok) {
+      let errorMessage: string = `${response.status}`;
+
+      try {
+        const text: string = await response.text();
+
+        try {
+          const parsedError: DeepSeekErrorResponse | undefined = DeepSeekErrorResponseSchema.safeParse(
+            JSON.parse(text),
+          ).data;
+          const apiError: string | undefined = parsedError?.error?.message;
+
+          if (apiError !== undefined) {
+            errorMessage = `${response.status}: ${apiError}`;
+          } else {
+            errorMessage = `${response.status}: ${text}`;
+          }
+        } catch {
+          errorMessage = `${response.status}: ${text}`;
+        }
+      } catch {
+        // body read failed, fall back to status-only message
+      }
+
+      log("error", `[article ${articleId}] DeepSeek API returned ${errorMessage}`);
       return null;
     }
 
-    const data: OpenCodeMessageResponse = MessageResponseSchema.parse(await messageRes.json());
-    const tokens: OpenCodeTokenInfo | undefined = data.info?.tokens;
+    const parsed: DeepSeekChatResponse = DeepSeekChatResponseSchema.parse(await response.json());
+    const content: string | null | undefined = parsed.choices[0]?.message?.content;
+
+    if (content == null || content === "") {
+      log("warn", `[article ${articleId}] DeepSeek response had no content`);
+      return null;
+    }
+
+    const usage: DeepSeekUsage | undefined = DeepSeekUsageSchema.safeParse(parsed.usage).data;
 
     log(
       "info",
-      `[article ${articleId}] Received opencode response (session ${sessionId})${tokens ? `, tokens: input=${tokens.input} output=${tokens.output} reasoning=${tokens.reasoning}` : ""}`,
+      `[article ${articleId}] DeepSeek response${usage ? `, tokens: prompt_tokens=${usage.prompt_tokens} completion_tokens=${usage.completion_tokens} total_tokens=${usage.total_tokens}` : ""}`,
     );
 
-    const textParts: OpenCodeMessageResponse["parts"] = (data.parts ?? []).filter(
-      (part) => part.type === "text",
-    );
-
-    if (textParts.length === 0) {
-      log("warn", `[article ${articleId}] opencode response had no text parts`);
-      return null;
-    }
-
-    return textParts[textParts.length - 1].text ?? null;
+    return content;
   } catch (err: unknown) {
-    log("error", `[article ${articleId}] OpenCode API call failed: ${err instanceof Error ? err.message : String(err)}`);
+    log(
+      "error",
+      `[article ${articleId}] DeepSeek API call failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
-  } finally {
-    if (sessionId) {
-      fetch(`${config.OPENCODE_SERVER_URL}/session/${sessionId}`, { method: "DELETE" }).catch(
-        (err: unknown) => {
-          log("warn", `Failed to clean up OpenCode session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
-        },
-      );
-    }
   }
 }
 
@@ -212,7 +216,10 @@ export function parseResponse(text: string): ClassifyResult[] | null {
       };
     });
   } catch (err: unknown) {
-    log("error", `Failed to parse classifier response: ${err instanceof Error ? err.message : String(err)}, raw: ${text}`);
+    log(
+      "error",
+      `Failed to parse classifier response: ${err instanceof Error ? err.message : String(err)}, raw: ${text}`,
+    );
     return null;
   }
 }
@@ -226,7 +233,7 @@ export async function classifyArticle(
   if (topics.length === 0) return [];
 
   const prompt: string = buildPrompt(articleTitle, articleSummary, topics);
-  const raw: string | null = await callOpenCode(prompt, articleId);
+  const raw: string | null = await callDeepSeek(prompt, articleId);
   if (!raw) return null;
 
   const result: ClassifyResult[] | null = parseResponse(raw);
@@ -234,7 +241,7 @@ export async function classifyArticle(
 
   log("warn", `[article ${articleId}] Failed to parse classifier response, retrying`);
 
-  const retryRaw: string | null = await callOpenCode(prompt, articleId);
+  const retryRaw: string | null = await callDeepSeek(prompt, articleId);
   if (!retryRaw) return null;
   return parseResponse(retryRaw);
 }

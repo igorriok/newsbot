@@ -7,7 +7,7 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 - **Feeds are global.** Anyone (admin) adds a feed once and it's polled for everyone.
 - **Topics are per-chat.** Each chat (a private DM or a group) sets its own topics, and only sees matches for its own topics — completely independent of which feed the article came from.
 - Every cycle: fetch all feeds → classify newly-fetched articles against every chat's topics → send one notification.
-- Classification is done by calling an [opencode](https://opencode.ai) server as an LLM classifier (no tools, a fixed system prompt, one throwaway session per call).
+- Classification is done by calling the DeepSeek API (OpenAI-compatible chat completions) with a fixed system prompt, requesting strict JSON (one request per article per retry).
 - Notifications are throttled to **one message per chat per cycle** — the rest stay queued and go out on subsequent cycles, oldest first.
 - If an article has an image (from RSS `media:content`/`media:thumbnail`, an image enclosure, or an `<img>` in the content), the notification is sent as a photo with a caption; otherwise as plain text.
 
@@ -15,7 +15,7 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 
 - Node.js >= 22
 - A Telegram bot token (create one via [@BotFather](https://t.me/BotFather))
-- An opencode server reachable over HTTP (`opencode serve`), with a provider/model configured (e.g. the `opencode-go` OpenCode Zen provider and `deepseek-v4-flash`)
+- A DeepSeek API key with chat completions access (e.g. for the `deepseek-v4-flash` model)
 
 ## Setup
 
@@ -26,9 +26,9 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 2. Copy `.env.example` to `.env` and fill it in:
    ```
    TELEGRAM_BOT_TOKEN=       # from @BotFather
-   OPENCODE_SERVER_URL=      # e.g. http://localhost:4096
-   OPENCODE_PROVIDER_ID=     # e.g. opencode-go
-   OPENCODE_MODEL_ID=        # e.g. deepseek-v4-flash
+   DEEPSEEK_API_KEY=         # your DeepSeek API key (chat completions access)
+   DEEPSEEK_MODEL_ID=        # e.g. deepseek-v4-flash
+   # DEEPSEEK_BASE_URL=      # e.g. https://api.deepseek.com (default)
    DATABASE_PATH=            # e.g. ./data/newsbot.db
    ADMIN_TELEGRAM_IDS=       # comma-separated Telegram user IDs allowed to use the bot
    POLL_CRON_SCHEDULE=       # e.g. */10 * * * * (every 10 minutes)
@@ -48,7 +48,7 @@ Only Telegram user IDs listed in `ADMIN_TELEGRAM_IDS` can use any bot command �
 docker compose up --build -d
 ```
 
-`docker-compose.yml` runs just the bot container (no opencode sidecar) and points `OPENCODE_SERVER_URL` at `http://host.docker.internal:4096`, i.e. it expects opencode to already be running on the host. Adjust that URL/port if your opencode server lives elsewhere.
+`docker-compose.yml` runs just the bot container — no host networking and no local servers are required. The DeepSeek API key and model come from `.env` (bind-mounted in via `env_file`).
 
 Both the SQLite database and a rolling log file (`newsbot.log`) live under `./data`, which is bind-mounted into the container — so both survive container rebuilds/recreation.
 
@@ -69,4 +69,4 @@ If a URL is submitted to `/addfeed` without `http(s)://`, it's assumed to be `ht
 
 ## Logs
 
-Set `LOG_LEVEL=debug` in `.env` for verbose per-article/per-request logs (opencode session creation, individual classification results, etc.). Default level is `info`. Logs go to both stdout and `<DATABASE_PATH's directory>/newsbot.log`.
+Set `LOG_LEVEL=debug` in `.env` for verbose per-article/per-request logs (individual classification requests, token usage, etc.). Default level is `info`. Logs go to both stdout and `<DATABASE_PATH's directory>/newsbot.log`.
