@@ -1,8 +1,8 @@
 import { pollOnce } from "../rss/poller";
 import { classifyArticle, ClassifyResult } from "../classifier/client";
 import { dispatchNotifications } from "../notifications/dispatcher";
-import { Article, getUncheckedArticles, getArticlesUncheckedForTopic } from "../db/articles";
-import { getAllTopics, Topic } from "../db/topics";
+import { Article, getUncheckedArticles } from "../db/articles";
+import { getAllTopics } from "../db/topics";
 import { upsertMatch } from "../db/article_topic_matches";
 import { log } from "../utils/log";
 
@@ -12,6 +12,8 @@ interface TopicInfo {
 }
 
 let running: boolean = false;
+
+const CLASSIFICATION_CONCURRENCY: number = 5;
 
 async function classifyArticlesAgainstTopics(articles: Article[], topics: TopicInfo[]): Promise<void> {
   if (articles.length === 0 || topics.length === 0) return;
@@ -43,24 +45,32 @@ async function classifyArticlesAgainstTopics(articles: Article[], topics: TopicI
       try {
         upsertMatch(article.id, match.topic_id, match.relevant, match.score, match.reason);
       } catch (err: unknown) {
-        log(
-          "error",
-          `Failed to upsert match for article ${article.id}, topic ${match.topic_id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        const msg: string = err instanceof Error ? err.message : String(err);
+        const isForeignKey: boolean =
+          typeof err === "object" && err !== null && "code" in err && err.code === "SQLITE_CONSTRAINT_FOREIGNKEY";
+
+        if (isForeignKey) {
+          // The topic or article was deleted across an await boundary between the
+          // classifier round-trip and this INSERT. This catch is the sole guard for
+          // that race — never rethrow, never ERROR, never retry the LLM call. Warn
+          // keeps the skip visible at the default log level without ERROR spam.
+          log("warn", `FK constraint on upsert for article ${article.id}, topic ${match.topic_id}: ${msg}`);
+          continue;
+        }
+
+        log("error", `Failed to upsert match for article ${article.id}, topic ${match.topic_id}: ${msg}`);
       }
     }
   };
 
-  const concurrencyLimit: number = 5;
-
-  for (let index: number = 0; index < articles.length; index += concurrencyLimit) {
-    const batch: Article[] = articles.slice(index, index + concurrencyLimit);
+  for (let index: number = 0; index < articles.length; index += CLASSIFICATION_CONCURRENCY) {
+    const batch: Article[] = articles.slice(index, index + CLASSIFICATION_CONCURRENCY);
 
     await Promise.all(batch.map(classifyOne));
   }
 }
 
-async function runClassificationCycle(): Promise<void> {
+export async function runClassificationCycle(): Promise<void> {
   const articles: Article[] = getUncheckedArticles();
   if (articles.length === 0) return;
 
@@ -74,14 +84,11 @@ async function runClassificationCycle(): Promise<void> {
   await classifyArticlesAgainstTopics(articles, topics);
 }
 
-export async function classifyBacklogForNewTopic(topic: Topic): Promise<void> {
-  const articles: Article[] = getArticlesUncheckedForTopic(topic.id);
-  if (articles.length === 0) return;
-
-  log("info", `Backfilling ${articles.length} existing articles against new topic "${topic.phrase}" (id ${topic.id})`);
-  await classifyArticlesAgainstTopics(articles, [{ id: topic.id, phrase: topic.phrase }]);
-  await dispatchNotifications();
-}
+// A new topic deliberately has no backfill: it applies to articles fetched from
+// the moment it was added onwards. The poll cycle classifies every newly fetched
+// article against all current topics, so a topic added now starts matching on the
+// next cycle without a sweep of the archive — which cost one API call per existing
+// article, per topic added.
 
 export function isCycleRunning(): boolean {
   return running;

@@ -1,17 +1,9 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import Database from "better-sqlite3";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
-import {
-  type Article,
-  insertArticle,
-  getUncheckedArticles,
-  getArticlesUncheckedForTopic,
-  getArticlesMissingImage,
-} from "../../src/db/articles";
+import { type Article, insertArticle, getUncheckedArticles, getArticlesMissingImage } from "../../src/db/articles";
 import { insertFeed } from "../../src/db/feeds";
-import { upsertChat } from "../../src/db/chats";
 
 type SqlRow = Record<string, boolean | number | string | null>;
 
@@ -136,25 +128,6 @@ void describe("articles", () => {
 
     assert.ok(unchecked.length > 0);
     assert.ok(unchecked.some((article) => article.guid === "guid-uc"));
-  });
-
-  void it("getArticlesUncheckedForTopic filters by topic", () => {
-    const chatId: number = upsertChat(10001).id;
-    const db: Database.Database = getDb();
-    const article: Article | null = insertArticle(feed1Id, "guid-fk", {
-      url: "https://example.com/fk",
-      title: "FK test",
-    });
-
-    db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (?, 'test')").run(chatId);
-    db.prepare("INSERT INTO article_topic_matches (article_id, topic_id, matched) VALUES (?, 1, 1)").run(article!.id);
-
-    const unchecked: Article[] = getArticlesUncheckedForTopic(1);
-
-    assert.equal(
-      unchecked.find((match) => match.id === article!.id),
-      undefined,
-    );
   });
 
   void it("getArticlesMissingImage returns articles with null image_url and unchecked", () => {

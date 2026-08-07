@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
     "test": "tsx --experimental-test-module-mocks --test tests/**/*.test.ts",
+    "spot-check": "tsx scripts/spot-check-false-positives.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -133,17 +133,3 @@ export function getUncheckedArticles(): Article[] {
     )
     .all();
 }
-
-export function getArticlesUncheckedForTopic(topicId: number): Article[] {
-  const db: Database.Database = getDb();
-  return db
-    .prepare<[number], Article>(
-      `
-    SELECT a.* FROM articles a
-    WHERE NOT EXISTS (
-      SELECT 1 FROM article_topic_matches m WHERE m.article_id = a.id AND m.topic_id = ?
-    )
-  `,
-    )
-    .all(topicId);
-}

@@ -40,6 +40,9 @@ void describe("parseResponse", () => {
   });
 
   void it("forces relevant=false when score is below MIN_RELEVANCE_SCORE (0.5)", () => {
+    // These assertions assume the default MIN_RELEVANCE_SCORE of 0.5 (the repo
+    // .env does not override it). An override would flip the 0.3 / 0.8 / 0.9
+    // assertions.
     const result: ClassifyResult[] | null = parseResponse(
       '{"matches":[{"topic_id":1,"relevant":true,"score":0.3,"reason":"low"}]}',
     );

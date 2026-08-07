@@ -3,7 +3,7 @@ import { config } from "../config";
 import { Chat, upsertChat } from "../db/chats";
 import { getFeedByUrl, insertFeed, deleteFeed, getAllFeeds, Feed } from "../db/feeds";
 import { insertTopic, deleteTopic, getTopicsForChat, getTopicByChatAndPhrase, Topic } from "../db/topics";
-import { pollCycle, isCycleRunning, classifyBacklogForNewTopic } from "../jobs/cycle";
+import { pollCycle, isCycleRunning } from "../jobs/cycle";
 import { log } from "../utils/log";
 
 export const bot: Bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -140,10 +140,7 @@ bot.command("addtopic", async (ctx) => {
 
   const topic: Topic = insertTopic(chat.id, phrase);
 
-  await ctx.reply(`Added topic: "${topic.phrase}". Checking existing articles for matches in the background...`);
-  classifyBacklogForNewTopic(topic).catch((err: Error) => {
-    log("error", `Backfill classification failed for topic ${topic.id}: ${err.message}`);
-  });
+  await ctx.reply(`Added topic: "${topic.phrase}". Matching new articles from now on.`);
 });
 
 bot.command("removetopic", async (ctx) => {

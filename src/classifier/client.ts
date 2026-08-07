@@ -103,10 +103,15 @@ export interface ClassifyResult {
   reason: string;
 }
 
-const SYSTEM_PROMPT: string = `You are a relevance classifier. Given an article and a list of topics, determine which topics the article is relevant to.
-Mark a topic as relevant ONLY if the article is substantively ABOUT that topic — it's a central subject of the article.
-Do NOT mark a topic as relevant just because it is mentioned in passing, tangentially, or as incidental background detail (e.g. a location, affiliation, or minor detail unrelated to the article's main subject).
-If in doubt, mark relevant as false and give a low score.
+const SYSTEM_PROMPT: string = `You are a relevance classifier. Given an article and a list of topic phrases, determine which topic phrases the article is relevant to.
+
+Each topic phrase is a LITERAL phrase the user typed — it is NOT a semantic category, a dictionary definition, or a concept to interpret broadly. The phrase may name a specific entity: a person, a place, a district, a brand, an event, or any other proper noun. You must match against the specific thing the user named, not against the individual words that happen to appear in the phrase.
+
+An article that shares only common dictionary words with the phrase is NOT relevant. Words like 'sector', 'street', 'market' or 'centre' carry many unrelated senses — an industry, a stretch of road, a segment of anything at all. If the article uses one of the phrase's words in ANY sense other than the specific thing the phrase names, the article is NOT relevant.
+
+Never supply the connection yourself. If the phrase names a district and the article mentions a street, road or landmark without stating that it lies in that district, the article is NOT relevant — do not fall back on your own knowledge of where a place is located, and never assert such a link in your reason. Judge only on what the article actually says.
+
+Mark a topic AS relevant ONLY when the article is substantively ABOUT the specific thing the user named — it's a central subject of the article. Do NOT mark a topic as relevant just because the phrase is mentioned in passing, tangentially, or as incidental background detail (e.g. a location, affiliation, or minor detail unrelated to the article's main subject). If in doubt, mark relevant as false and give a low score.
 Respond with strict JSON only — no markdown, no code fences, no extra text.
 Format: {"matches": [{"topic_id": <int>, "relevant": <bool>, "score": <0.0-1.0>, "reason": "<brief explanation>"}]}`;
 
@@ -115,7 +120,7 @@ function buildPrompt(articleTitle: string, articleSummary: string | null, topics
   return `Article title: ${articleTitle}
 Article summary: ${articleSummary ?? "(no summary)"}
 
-Topics:
+Topic phrases (literal user queries to match against):
 ${topicLines}
 
 Respond with strict JSON only.`;
@@ -141,6 +146,7 @@ async function callDeepSeek(prompt: string, articleId: number): Promise<string |
           { role: "user", content: prompt },
         ],
         stream: false,
+        temperature: 0,
         response_format: { type: "json_object" },
       }),
     });
