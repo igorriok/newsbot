@@ -94,6 +94,14 @@ export function isCycleRunning(): boolean {
   return running;
 }
 
+// Feed/image fetches carry their own per-request timeouts, but a stalled DNS
+// lookup can hang past those (Node's fetch + AbortSignal.timeout doesn't always
+// cancel a stuck lookup). Without an outer bound, a single wedged request pins
+// `running` true forever and silently skips every cycle after it. This timeout
+// is the backstop: it only unblocks scheduling of future cycles by releasing
+// `running`, it can't cancel the underlying hung request.
+const CYCLE_TIMEOUT_MS: number = 6 * 60 * 1000;
+
 export async function pollCycle(): Promise<void> {
   if (running) {
     log("warn", "Previous poll cycle still running, skipping");
@@ -103,12 +111,27 @@ export async function pollCycle(): Promise<void> {
   running = true;
   log("info", "Poll cycle starting");
 
-  try {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout: Promise<void> = new Promise((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`Poll cycle exceeded ${CYCLE_TIMEOUT_MS}ms timeout`));
+    }, CYCLE_TIMEOUT_MS);
+  });
+
+  const work: Promise<void> = (async (): Promise<void> => {
     await pollOnce();
     await runClassificationCycle();
     await dispatchNotifications();
+  })();
+
+  try {
+    await Promise.race([work, timeout]);
     log("info", "Poll cycle finished");
+  } catch (err: unknown) {
+    log("error", `Poll cycle failed or timed out: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
+    clearTimeout(timeoutHandle);
     running = false;
   }
 }
