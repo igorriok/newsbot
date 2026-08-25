@@ -55,6 +55,12 @@ export function getUnnotifiedMatches(): UnnotifiedMatch[] {
     JOIN articles a ON a.id = m.article_id
     JOIN topics t ON t.id = m.topic_id
     WHERE m.matched = 1 AND m.notified = 0
+      AND NOT EXISTS (
+        SELECT 1 FROM article_topic_matches m2
+        WHERE m2.topic_id = m.topic_id
+          AND m2.notified = 1
+          AND date(m2.notified_at) = date('now')
+      )
     ORDER BY m.checked_at ASC, m.article_id ASC, m.topic_id ASC
   `,
     )
@@ -64,10 +70,9 @@ export function getUnnotifiedMatches(): UnnotifiedMatch[] {
 export function markNotified(articleId: number, topicId: number): void {
   const db: Database.Database = getDb();
 
-  db.prepare("UPDATE article_topic_matches SET notified = 1 WHERE article_id = ? AND topic_id = ?").run(
-    articleId,
-    topicId,
-  );
+  db.prepare(
+    "UPDATE article_topic_matches SET notified = 1, notified_at = datetime('now') WHERE article_id = ? AND topic_id = ?",
+  ).run(articleId, topicId);
 }
 
 // Marks every matching topic this chat has for the article as notified, not just the
@@ -79,7 +84,7 @@ export function markNotifiedForChat(articleId: number, chatId: number): void {
   db.prepare(
     `
     UPDATE article_topic_matches
-    SET notified = 1
+    SET notified = 1, notified_at = datetime('now')
     WHERE article_id = ?
       AND notified = 0
       AND topic_id IN (SELECT id FROM topics WHERE chat_id = ?)

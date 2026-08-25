@@ -154,4 +154,27 @@ void describe("article_topic_matches", () => {
     assert.equal(remaining.length, 1);
     assert.equal(remaining[0].topic_id, 2);
   });
+
+  void it("getUnnotifiedMatches withholds a second article for a topic already notified today", () => {
+    const db: Database.Database = getDb();
+
+    db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (7001)").run();
+    db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed7')").run();
+    db.prepare(
+      "INSERT INTO articles (feed_id, guid, url, title, summary) VALUES (1, 'guid-8', 'https://example.com/h', 'Title8', 'Summary8')",
+    ).run();
+    db.prepare(
+      "INSERT INTO articles (feed_id, guid, url, title, summary) VALUES (1, 'guid-9', 'https://example.com/i', 'Title9', 'Summary9')",
+    ).run();
+    db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (1, 'topic7')").run();
+
+    upsertMatch(1, 1, true, 0.9, "");
+    upsertMatch(2, 1, true, 0.8, "");
+
+    markNotified(1, 1);
+
+    const remaining: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
+
+    assert.equal(remaining.length, 0);
+  });
 });

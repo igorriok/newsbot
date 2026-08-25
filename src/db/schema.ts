@@ -66,6 +66,12 @@ export function runMigrations(): void {
     );
   `);
 
+  const matchColumns: TableColumn[] = db.prepare<[], TableColumn>("PRAGMA table_info(article_topic_matches)").all();
+
+  if (!matchColumns.some((column) => column.name === "notified_at")) {
+    db.exec("ALTER TABLE article_topic_matches ADD COLUMN notified_at TEXT");
+  }
+
   const columns: TableColumn[] = db.prepare<[], TableColumn>("PRAGMA table_info(articles)").all();
 
   if (!columns.some((column) => column.name === "image_url")) {
