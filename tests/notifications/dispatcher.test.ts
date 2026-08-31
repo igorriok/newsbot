@@ -177,4 +177,57 @@ void describe("dispatchNotifications", () => {
     assert.equal(sendPhoto.mock.callCount(), 2);
     assert.equal(sendMessage.mock.callCount(), 0);
   });
+  void it("retires a same-topic match held back by the daily limit instead of sending it tomorrow", async () => {
+    const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
+
+    const db: Database.Database = getDb();
+
+    db.prepare(
+      "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (1, 1, 1, 0.8, datetime('now'), 0)",
+    ).run();
+    db.prepare(
+      "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (2, 1, 1, 0.7, datetime('now'), 0)",
+    ).run();
+
+    await dispatchNotifications();
+
+    assert.equal(sendMessage.mock.callCount(), 1);
+
+    const withheld: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 2 AND topic_id = 1")
+      .get()!;
+
+    assert.equal(withheld.notified, 1);
+
+    // Roll the clock forward a day: the withheld article must stay retired rather than
+    // becoming tomorrow's notification for the topic.
+    db.prepare("UPDATE article_topic_matches SET notified_at = datetime('now', '-1 day')").run();
+
+    await dispatchNotifications();
+
+    assert.equal(sendMessage.mock.callCount(), 1);
+  });
+
+  void it("retires matches held back by the daily limit even when nothing is dispatched", async () => {
+    const { dispatchNotifications } = await import("../../src/notifications/dispatcher");
+
+    const db: Database.Database = getDb();
+
+    db.prepare(
+      "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified, notified_at) VALUES (1, 1, 1, 0.8, datetime('now'), 1, datetime('now'))",
+    ).run();
+    db.prepare(
+      "INSERT INTO article_topic_matches (article_id, topic_id, matched, score, checked_at, notified) VALUES (2, 1, 1, 0.7, datetime('now'), 0)",
+    ).run();
+
+    await dispatchNotifications();
+
+    assert.equal(sendMessage.mock.callCount(), 0);
+
+    const withheld: SqlRow = db
+      .prepare<[], SqlRow>("SELECT notified FROM article_topic_matches WHERE article_id = 2 AND topic_id = 1")
+      .get()!;
+
+    assert.equal(withheld.notified, 1);
+  });
 });

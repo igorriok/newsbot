@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import { setupTestDb } from "../helpers/db";
 import { getDb } from "../../src/db/connection";
-import { upsertMatch, getUnnotifiedMatches, markNotified } from "../../src/db/article_topic_matches";
+import {
+  upsertMatch,
+  getUnnotifiedMatches,
+  markNotified,
+  suppressDailyLimitedMatches,
+} from "../../src/db/article_topic_matches";
 
 interface MatchRow {
   article_id: number;
@@ -176,5 +181,67 @@ void describe("article_topic_matches", () => {
     const remaining: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
 
     assert.equal(remaining.length, 0);
+  });
+
+  void it("suppressDailyLimitedMatches retires matches withheld by the daily limit", () => {
+    const db: Database.Database = getDb();
+
+    db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (8001)").run();
+    db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed8')").run();
+    db.prepare(
+      "INSERT INTO articles (feed_id, guid, url, title, summary) VALUES (1, 'guid-10', 'https://example.com/j', 'Title10', 'Summary10')",
+    ).run();
+    db.prepare(
+      "INSERT INTO articles (feed_id, guid, url, title, summary) VALUES (1, 'guid-11', 'https://example.com/k', 'Title11', 'Summary11')",
+    ).run();
+    db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (1, 'topic8')").run();
+
+    upsertMatch(1, 1, true, 0.9, "");
+    upsertMatch(2, 1, true, 0.8, "");
+
+    markNotified(1, 1);
+
+    assert.equal(suppressDailyLimitedMatches(), 1);
+
+    const row: MatchRow | undefined = db
+      .prepare<[], MatchRow>("SELECT * FROM article_topic_matches WHERE article_id = 2 AND topic_id = 1")
+      .get();
+
+    assert.notEqual(row, undefined);
+
+    if (row) {
+      assert.equal(row.notified, 1);
+    }
+
+    // The retired match must stay retired once the day rolls over, rather than
+    // resurfacing as tomorrow's first notification for the topic.
+    db.prepare("UPDATE article_topic_matches SET notified_at = datetime('now', '-1 day')").run();
+
+    assert.equal(getUnnotifiedMatches().length, 0);
+  });
+
+  void it("suppressDailyLimitedMatches leaves topics that have not notified today alone", () => {
+    const db: Database.Database = getDb();
+
+    db.prepare("INSERT INTO chats (telegram_chat_id) VALUES (9001)").run();
+    db.prepare("INSERT INTO feeds (url) VALUES ('https://example.com/feed9')").run();
+    db.prepare(
+      "INSERT INTO articles (feed_id, guid, url, title, summary) VALUES (1, 'guid-12', 'https://example.com/l', 'Title12', 'Summary12')",
+    ).run();
+    db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (1, 'topic9a')").run();
+    db.prepare("INSERT INTO topics (chat_id, phrase) VALUES (1, 'topic9b')").run();
+
+    upsertMatch(1, 1, true, 0.9, "");
+    upsertMatch(1, 2, true, 0.8, "");
+
+    markNotified(1, 1);
+    db.prepare("UPDATE article_topic_matches SET notified_at = datetime('now', '-1 day') WHERE topic_id = 1").run();
+
+    assert.equal(suppressDailyLimitedMatches(), 0);
+
+    const remaining: ReturnType<typeof getUnnotifiedMatches> = getUnnotifiedMatches();
+
+    assert.equal(remaining.length, 1);
+    assert.equal(remaining[0].topic_id, 2);
   });
 });

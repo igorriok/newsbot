@@ -1,5 +1,10 @@
 import { InputFile } from "grammy";
-import { getUnnotifiedMatches, markNotifiedForChat, UnnotifiedMatch } from "../db/article_topic_matches";
+import {
+  getUnnotifiedMatches,
+  markNotifiedForChat,
+  suppressDailyLimitedMatches,
+  UnnotifiedMatch,
+} from "../db/article_topic_matches";
 import { getDb } from "../db/connection";
 import { bot } from "../bot";
 import { log } from "../utils/log";
@@ -79,25 +84,35 @@ async function sendOne(match: UnnotifiedMatch): Promise<void> {
 
 export async function dispatchNotifications(): Promise<void> {
   const matches: UnnotifiedMatch[] = getUnnotifiedMatches();
-  if (matches.length === 0) return;
 
-  // Throttle per chat: send at most one notification per chat per cycle (oldest first),
-  // instead of one globally, so a busy chat can't starve out a quiet one.
-  const oldestPerChat: Map<number, UnnotifiedMatch> = new Map<number, UnnotifiedMatch>();
+  if (matches.length > 0) {
+    // Throttle per chat: send at most one notification per chat per cycle (oldest first),
+    // instead of one globally, so a busy chat can't starve out a quiet one.
+    const oldestPerChat: Map<number, UnnotifiedMatch> = new Map<number, UnnotifiedMatch>();
 
-  for (const match of matches) {
-    if (!oldestPerChat.has(match.chat_id)) oldestPerChat.set(match.chat_id, match);
+    for (const match of matches) {
+      if (!oldestPerChat.has(match.chat_id)) oldestPerChat.set(match.chat_id, match);
+    }
+
+    const toSend: UnnotifiedMatch[] = [...oldestPerChat.values()];
+    const remaining: number = matches.length - toSend.length;
+
+    log(
+      "info",
+      `Dispatching ${toSend.length} notification(s) across ${toSend.length} chat(s) (${remaining} remaining for next cycle)`,
+    );
+
+    for (const match of toSend) {
+      await sendOne(match);
+    }
   }
 
-  const toSend: UnnotifiedMatch[] = [...oldestPerChat.values()];
-  const remaining: number = matches.length - toSend.length;
+  // Runs unconditionally, and after the sends: matches held back by the daily limit
+  // are invisible to getUnnotifiedMatches, so an empty queue is exactly the case where
+  // some are waiting, and a send in this cycle can push further matches over the limit.
+  const suppressed: number = suppressDailyLimitedMatches();
 
-  log(
-    "info",
-    `Dispatching ${toSend.length} notification(s) across ${toSend.length} chat(s) (${remaining} remaining for next cycle)`,
-  );
-
-  for (const match of toSend) {
-    await sendOne(match);
+  if (suppressed > 0) {
+    log("info", `Retired ${suppressed} match(es) held back by the one-per-topic-per-day limit`);
   }
 }

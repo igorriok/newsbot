@@ -91,3 +91,30 @@ export function markNotifiedForChat(articleId: number, chatId: number): void {
   `,
   ).run(articleId, chatId);
 }
+
+// A match that is matched but held back by the one-notification-per-topic-per-day
+// rule is retired, not queued: the news it carries is stale by tomorrow, so leaving
+// it unnotified would mean a topic's first message of every day is yesterday's
+// article. Marking it notified (without sending) drops it for good.
+export function suppressDailyLimitedMatches(): number {
+  const db: Database.Database = getDb();
+
+  const result: Database.RunResult = db
+    .prepare(
+      `
+    UPDATE article_topic_matches
+    SET notified = 1, notified_at = datetime('now')
+    WHERE matched = 1
+      AND notified = 0
+      AND EXISTS (
+        SELECT 1 FROM article_topic_matches m2
+        WHERE m2.topic_id = article_topic_matches.topic_id
+          AND m2.notified = 1
+          AND date(m2.notified_at) = date('now')
+      )
+  `,
+    )
+    .run();
+
+  return result.changes;
+}
