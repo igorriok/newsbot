@@ -7,7 +7,7 @@ type MockResponseJson = string | number | boolean | null | MockResponseJson[] | 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- interface indirection is required to break the Record<> circular type alias reference above
 interface MockResponseJsonObject extends Record<string, MockResponseJson> {}
 
-type DeepSeekRequestBodySchemaType = z.ZodObject<{
+type ChatRequestBodySchemaType = z.ZodObject<{
   model: z.ZodString;
   messages: z.ZodArray<z.ZodObject<{ role: z.ZodString; content: z.ZodString }>>;
   stream: z.ZodBoolean;
@@ -15,7 +15,7 @@ type DeepSeekRequestBodySchemaType = z.ZodObject<{
   response_format: z.ZodObject<{ type: z.ZodString }>;
 }>;
 
-const DeepSeekRequestBodySchema: DeepSeekRequestBodySchemaType = z
+const ChatRequestBodySchema: ChatRequestBodySchemaType = z
   .object({
     model: z.string(),
     messages: z.array(z.object({ role: z.string(), content: z.string() })),
@@ -25,7 +25,7 @@ const DeepSeekRequestBodySchema: DeepSeekRequestBodySchemaType = z
   })
   .passthrough();
 
-type DeepSeekRequestBody = z.infer<typeof DeepSeekRequestBodySchema>;
+type ChatRequestBody = z.infer<typeof ChatRequestBodySchema>;
 
 interface CapturedRequest {
   url: string;
@@ -49,19 +49,20 @@ function makeFetchMock(
   );
 }
 
-function parseRequestBody(init: RequestInit | undefined): DeepSeekRequestBody {
+function parseRequestBody(init: RequestInit | undefined): ChatRequestBody {
   if (init === undefined || typeof init.body !== "string") {
     throw new Error("expected string request body");
   }
 
-  return DeepSeekRequestBodySchema.parse(JSON.parse(init.body));
+  return ChatRequestBodySchema.parse(JSON.parse(init.body));
 }
 
 void describe("false-positive regression fixtures (Bug 2)", () => {
   void before(async () => {
-    process.env.DEEPSEEK_API_KEY = "test-key";
-    process.env.DEEPSEEK_MODEL_ID = "deepseek-v4-flash";
-    process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+    process.env.LLM_API_KEY = "test-key";
+    process.env.LLM_MODEL_ID = "gemma-4-e4b-it-qat";
+    process.env.LLM_BASE_URL = "http://llm.test/api/v1";
+    process.env.LLM_RETRY_DELAY_MS = "0";
 
     mock.module("../../src/utils/log", {
       exports: {
@@ -71,7 +72,7 @@ void describe("false-positive regression fixtures (Bug 2)", () => {
 
     const { config } = await import("../../src/config");
 
-    BASE = config.DEEPSEEK_BASE_URL;
+    BASE = config.LLM_BASE_URL;
   });
 
   void after(() => {
@@ -97,7 +98,7 @@ void describe("false-positive regression fixtures (Bug 2)", () => {
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, `${BASE}/chat/completions`);
 
-    const parsedBody: DeepSeekRequestBody = parseRequestBody(requests[0].init);
+    const parsedBody: ChatRequestBody = parseRequestBody(requests[0].init);
 
     assert.equal(parsedBody.temperature, 0);
     assert.ok(parsedBody.messages[0].content.includes("LITERAL phrase the user typed"));

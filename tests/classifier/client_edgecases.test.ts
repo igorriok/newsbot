@@ -44,9 +44,10 @@ function makeFetchMock(handler: (callIndex: number) => Promise<MockResponse>): R
 
 void describe("classifyArticle edge cases", () => {
   void before(async () => {
-    process.env.DEEPSEEK_API_KEY = "test-key";
-    process.env.DEEPSEEK_MODEL_ID = "deepseek-v4-flash";
-    process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+    process.env.LLM_API_KEY = "test-key";
+    process.env.LLM_MODEL_ID = "gemma-4-e4b-it-qat";
+    process.env.LLM_BASE_URL = "http://llm.test/api/v1";
+    process.env.LLM_RETRY_DELAY_MS = "0";
 
     mock.module("../../src/utils/log", {
       exports: {
@@ -163,7 +164,7 @@ void describe("classifyArticle edge cases", () => {
     const errorMessages: string[] = logCalls.filter((call) => call.level === "error").map((call) => call.message);
 
     assert.ok(
-      errorMessages.some((message) => message.includes("DeepSeek API call failed")),
+      errorMessages.some((message) => message.includes("LLM API call failed")),
       `expected error log, got: ${JSON.stringify(errorMessages)}`,
     );
   });
@@ -183,7 +184,7 @@ void describe("classifyArticle edge cases", () => {
     const errorMessages: string[] = logCalls.filter((call) => call.level === "error").map((call) => call.message);
 
     assert.ok(
-      errorMessages.some((message) => message.includes("DeepSeek API call failed")),
+      errorMessages.some((message) => message.includes("LLM API call failed")),
       `expected error log, got: ${JSON.stringify(errorMessages)}`,
     );
   });
@@ -202,7 +203,7 @@ void describe("classifyArticle edge cases", () => {
     const errorMessages: string[] = logCalls.filter((call) => call.level === "error").map((call) => call.message);
 
     assert.ok(
-      errorMessages.some((message) => message.includes("DeepSeek API call failed")),
+      errorMessages.some((message) => message.includes("LLM API call failed")),
       `expected error log, got: ${JSON.stringify(errorMessages)}`,
     );
   });
@@ -269,12 +270,12 @@ void describe("classifyArticle edge cases", () => {
     const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [{ id: 1, phrase: "AI" }]);
 
     assert.notEqual(result, null);
-    assert.equal(result!.length, 0);
+    assert.deepEqual(result, [{ topic_id: 1, relevant: false, score: 0, reason: "" }]);
 
     const infoMessages: string[] = logCalls.filter((call) => call.level === "info").map((call) => call.message);
 
     assert.ok(
-      infoMessages.some((message) => message.includes("DeepSeek response") && !message.includes("tokens:")),
+      infoMessages.some((message) => message.includes("LLM response") && !message.includes("tokens:")),
       `expected info log without token fields, got: ${JSON.stringify(infoMessages)}`,
     );
   });
@@ -301,14 +302,14 @@ void describe("classifyArticle edge cases", () => {
     const errorMessages: string[] = logCalls.filter((call) => call.level === "error").map((call) => call.message);
 
     assert.ok(
-      !errorMessages.some((message) => message.includes("DeepSeek API call failed")),
+      !errorMessages.some((message) => message.includes("LLM API call failed")),
       `no error log expected for non-conforming usage, got: ${JSON.stringify(errorMessages)}`,
     );
 
     const infoMessages: string[] = logCalls.filter((call) => call.level === "info").map((call) => call.message);
 
     assert.ok(
-      infoMessages.some((message) => message.includes("DeepSeek response") && !message.includes("tokens:")),
+      infoMessages.some((message) => message.includes("LLM response") && !message.includes("tokens:")),
       `expected info log without token fields, got: ${JSON.stringify(infoMessages)}`,
     );
   });
@@ -324,6 +325,123 @@ void describe("classifyArticle edge cases", () => {
     const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [{ id: 1, phrase: "AI" }]);
 
     assert.equal(result, null);
+    assert.equal(fetchMock.mock.callCount(), 1);
+  });
+
+  void it("retries on 503 (model loading) and returns the result once the API recovers", async () => {
+    const fetchMock: ReturnType<typeof makeFetchMock> = makeFetchMock((callIndex) =>
+      callIndex === 0
+        ? Promise.resolve({ status: 503, ok: false, text: '{"error":{"message":"chat model unavailable"}}' })
+        : Promise.resolve({ json: { choices: [{ message: { content: '{"matches":[{"topic_id":1,"relevant":true}]}' } }] } }),
+    );
+
+    mock.method(global, "fetch", fetchMock);
+
+    const { classifyArticle } = await import("../../src/classifier/client");
+    const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [{ id: 1, phrase: "AI" }]);
+
+    assert.notEqual(result, null);
+    assert.equal(result![0].topic_id, 1);
+    assert.equal(fetchMock.mock.callCount(), 2);
+
+    const warnMessages: string[] = logCalls.filter((call) => call.level === "warn").map((call) => call.message);
+
+    assert.ok(
+      warnMessages.some((message) => message.includes("503") && message.includes("retry 1/")),
+      `expected a 503 retry warning, got: ${JSON.stringify(warnMessages)}`,
+    );
+  });
+
+  void it("gives up after the 503 retry budget is exhausted (four requests, null result)", async () => {
+    const fetchMock: ReturnType<typeof makeFetchMock> = makeFetchMock(() =>
+      Promise.resolve({ status: 503, ok: false, text: '{"error":{"message":"chat model unavailable"}}' }),
+    );
+
+    mock.method(global, "fetch", fetchMock);
+
+    const { classifyArticle } = await import("../../src/classifier/client");
+    const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [{ id: 1, phrase: "AI" }]);
+
+    assert.equal(result, null);
+    assert.equal(fetchMock.mock.callCount(), 4);
+
+    const errorMessages: string[] = logCalls.filter((call) => call.level === "error").map((call) => call.message);
+
+    assert.ok(
+      errorMessages.some((message) => message.includes("503") && message.includes("chat model unavailable")),
+      `expected final 503 error log, got: ${JSON.stringify(errorMessages)}`,
+    );
+  });
+
+  void it("passes an abort signal to fetch and returns null when the request times out", async () => {
+    const fetchMock: ReturnType<typeof mock.fn> = mock.fn((_url: string, init?: RequestInit) => {
+      assert.ok(init?.signal instanceof AbortSignal, "expected fetch to receive an AbortSignal");
+
+      const err: Error = new Error("The operation was aborted due to timeout");
+
+      err.name = "TimeoutError";
+      return Promise.reject(err);
+    });
+
+    mock.method(global, "fetch", fetchMock);
+
+    const { classifyArticle } = await import("../../src/classifier/client");
+    const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [{ id: 1, phrase: "AI" }]);
+
+    assert.equal(result, null);
+    assert.equal(fetchMock.mock.callCount(), 1);
+
+    const errorMessages: string[] = logCalls.filter((call) => call.level === "error").map((call) => call.message);
+
+    assert.ok(
+      errorMessages.some((message) => message.includes("LLM API call failed") && message.includes("timeout")),
+      `expected timeout error log, got: ${JSON.stringify(errorMessages)}`,
+    );
+  });
+
+  void it("fills in topics omitted by the model as not relevant so every topic gets a row", async () => {
+    const fetchMock: ReturnType<typeof makeFetchMock> = makeFetchMock(() =>
+      Promise.resolve({
+        json: { choices: [{ message: { content: '{"matches":[{"topic_id":2,"relevant":true,"score":0.9,"reason":"yes"}]}' } }] },
+      }),
+    );
+
+    mock.method(global, "fetch", fetchMock);
+
+    const { classifyArticle } = await import("../../src/classifier/client");
+    const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [
+      { id: 1, phrase: "AI" },
+      { id: 2, phrase: "football" },
+      { id: 3, phrase: "weather" },
+    ]);
+
+    assert.notEqual(result, null);
+    assert.deepEqual(
+      result!.map((match) => [match.topic_id, match.relevant, match.score]).sort((left, right) => left[0] - right[0]),
+      [
+        [1, false, 0],
+        [2, true, 0.9],
+        [3, false, 0],
+      ],
+    );
+  });
+
+  void it("returns a not-relevant entry per topic when the model answers with an empty matches list", async () => {
+    const fetchMock: ReturnType<typeof makeFetchMock> = makeFetchMock(() =>
+      Promise.resolve({ json: { choices: [{ message: { content: '{"matches":[]}' } }] } }),
+    );
+
+    mock.method(global, "fetch", fetchMock);
+
+    const { classifyArticle } = await import("../../src/classifier/client");
+    const result: ClassifyResult[] | null = await classifyArticle(1, "Test", null, [
+      { id: 1, phrase: "AI" },
+      { id: 2, phrase: "football" },
+    ]);
+
+    assert.notEqual(result, null);
+    assert.equal(result!.length, 2);
+    assert.ok(result!.every((match) => !match.relevant && match.score === 0));
     assert.equal(fetchMock.mock.callCount(), 1);
   });
 });

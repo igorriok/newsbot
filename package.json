@@ -1,7 +1,7 @@
 {
   "name": "newsbot",
   "version": "1.0.0",
-  "description": "Telegram RSS News Bot with DeepSeek LLM classifier",
+  "description": "Telegram RSS News Bot with an LLM classifier (OpenAI-compatible chat API)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

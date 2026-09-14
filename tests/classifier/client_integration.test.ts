@@ -8,20 +8,20 @@ type MockResponseJson = string | number | boolean | null | MockResponseJson[] | 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- interface indirection is required to break the Record<> circular type alias reference below
 interface MockResponseJsonObject extends Record<string, MockResponseJson> {}
 
-interface DeepSeekConfigSnapshot {
-  DEEPSEEK_API_KEY: string;
-  DEEPSEEK_MODEL_ID: string;
-  DEEPSEEK_BASE_URL: string;
+interface LlmConfigSnapshot {
+  LLM_API_KEY: string;
+  LLM_MODEL_ID: string;
+  LLM_BASE_URL: string;
 }
 
-type DeepSeekRequestBodySchemaType = z.ZodObject<{
+type ChatRequestBodySchemaType = z.ZodObject<{
   model: z.ZodString;
   messages: z.ZodArray<z.ZodObject<{ role: z.ZodString; content: z.ZodString }>>;
   stream: z.ZodBoolean;
   response_format: z.ZodObject<{ type: z.ZodString }>;
 }>;
 
-const DeepSeekRequestBodySchema: DeepSeekRequestBodySchemaType = z
+const ChatRequestBodySchema: ChatRequestBodySchemaType = z
   .object({
     model: z.string(),
     messages: z.array(z.object({ role: z.string(), content: z.string() })),
@@ -30,7 +30,7 @@ const DeepSeekRequestBodySchema: DeepSeekRequestBodySchemaType = z
   })
   .passthrough();
 
-type DeepSeekRequestBody = z.infer<typeof DeepSeekRequestBodySchema>;
+type ChatRequestBody = z.infer<typeof ChatRequestBodySchema>;
 
 interface CapturedRequest {
   url: string;
@@ -43,7 +43,7 @@ interface LogCall {
 }
 
 let BASE: string = "";
-let cfg: DeepSeekConfigSnapshot;
+let cfg: LlmConfigSnapshot;
 const logCalls: LogCall[] = [];
 
 function makeFetchMock(
@@ -88,19 +88,20 @@ function getHeaderValue(headers: RequestInit["headers"], name: string): string |
   return null;
 }
 
-function parseRequestBody(init: RequestInit | undefined): DeepSeekRequestBody {
+function parseRequestBody(init: RequestInit | undefined): ChatRequestBody {
   if (init === undefined || typeof init.body !== "string") {
     throw new Error("expected string request body");
   }
 
-  return DeepSeekRequestBodySchema.parse(JSON.parse(init.body));
+  return ChatRequestBodySchema.parse(JSON.parse(init.body));
 }
 
 void describe("classifyArticle", () => {
   void before(async () => {
-    process.env.DEEPSEEK_API_KEY = "test-key";
-    process.env.DEEPSEEK_MODEL_ID = "deepseek-v4-flash";
-    process.env.DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+    process.env.LLM_API_KEY = "test-key";
+    process.env.LLM_MODEL_ID = "gemma-4-e4b-it-qat";
+    process.env.LLM_BASE_URL = "http://llm.test/api/v1";
+    process.env.LLM_RETRY_DELAY_MS = "0";
 
     mock.module("../../src/utils/log", {
       exports: {
@@ -112,11 +113,11 @@ void describe("classifyArticle", () => {
 
     const { config } = await import("../../src/config");
 
-    BASE = config.DEEPSEEK_BASE_URL;
+    BASE = config.LLM_BASE_URL;
     cfg = {
-      DEEPSEEK_API_KEY: config.DEEPSEEK_API_KEY,
-      DEEPSEEK_MODEL_ID: config.DEEPSEEK_MODEL_ID,
-      DEEPSEEK_BASE_URL: config.DEEPSEEK_BASE_URL,
+      LLM_API_KEY: config.LLM_API_KEY,
+      LLM_MODEL_ID: config.LLM_MODEL_ID,
+      LLM_BASE_URL: config.LLM_BASE_URL,
     };
   });
 
@@ -153,11 +154,11 @@ void describe("classifyArticle", () => {
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, `${BASE}/chat/completions`);
     assert.equal(requests[0].init?.method, "POST");
-    assert.equal(getHeaderValue(requests[0].init?.headers, "Authorization"), `Bearer ${cfg.DEEPSEEK_API_KEY}`);
+    assert.equal(getHeaderValue(requests[0].init?.headers, "Authorization"), `Bearer ${cfg.LLM_API_KEY}`);
 
-    const parsedBody: DeepSeekRequestBody = parseRequestBody(requests[0].init);
+    const parsedBody: ChatRequestBody = parseRequestBody(requests[0].init);
 
-    assert.equal(parsedBody.model, cfg.DEEPSEEK_MODEL_ID);
+    assert.equal(parsedBody.model, cfg.LLM_MODEL_ID);
     assert.equal(parsedBody.stream, false);
     assert.deepEqual(parsedBody.response_format, { type: "json_object" });
     assert.equal(parsedBody.messages.length, 2);

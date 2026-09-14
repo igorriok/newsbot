@@ -2,61 +2,61 @@ import { config } from "../config";
 import { log } from "../utils/log";
 import { z } from "zod";
 
-type DeepSeekMessageSchemaType = z.ZodObject<{
+type ChatCompletionMessageSchemaType = z.ZodObject<{
   content: z.ZodOptional<z.ZodNullable<z.ZodString>>;
 }>;
 
-const DeepSeekMessageSchema: DeepSeekMessageSchemaType = z
+const ChatCompletionMessageSchema: ChatCompletionMessageSchemaType = z
   .object({
     content: z.string().nullable().optional(),
   })
   .passthrough();
 
-type DeepSeekChoiceSchemaType = z.ZodObject<{
-  message: DeepSeekMessageSchemaType;
+type ChatCompletionChoiceSchemaType = z.ZodObject<{
+  message: ChatCompletionMessageSchemaType;
 }>;
 
-const DeepSeekChoiceSchema: DeepSeekChoiceSchemaType = z
+const ChatCompletionChoiceSchema: ChatCompletionChoiceSchemaType = z
   .object({
-    message: DeepSeekMessageSchema,
+    message: ChatCompletionMessageSchema,
   })
   .passthrough();
 
-type DeepSeekUsageSchemaType = z.ZodObject<{
+type ChatCompletionUsageSchemaType = z.ZodObject<{
   prompt_tokens: z.ZodNumber;
   completion_tokens: z.ZodNumber;
   total_tokens: z.ZodNumber;
 }>;
 
-const DeepSeekUsageSchema: DeepSeekUsageSchemaType = z.object({
+const ChatCompletionUsageSchema: ChatCompletionUsageSchemaType = z.object({
   prompt_tokens: z.number(),
   completion_tokens: z.number(),
   total_tokens: z.number(),
 });
 
-type DeepSeekUsage = z.infer<typeof DeepSeekUsageSchema>;
+type ChatCompletionUsage = z.infer<typeof ChatCompletionUsageSchema>;
 
-type DeepSeekChatResponseSchemaType = z.ZodObject<{
-  choices: z.ZodArray<DeepSeekChoiceSchemaType>;
+type ChatCompletionResponseSchemaType = z.ZodObject<{
+  choices: z.ZodArray<ChatCompletionChoiceSchemaType>;
   usage: z.ZodOptional<z.ZodUnknown>;
 }>;
 
-const DeepSeekChatResponseSchema: DeepSeekChatResponseSchemaType = z.object({
-  choices: z.array(DeepSeekChoiceSchema),
+const ChatCompletionResponseSchema: ChatCompletionResponseSchemaType = z.object({
+  choices: z.array(ChatCompletionChoiceSchema),
   usage: z.unknown().optional(),
 });
 
-type DeepSeekChatResponse = z.infer<typeof DeepSeekChatResponseSchema>;
+type ChatCompletionResponse = z.infer<typeof ChatCompletionResponseSchema>;
 
-type DeepSeekErrorSchemaType = z.ZodObject<{
+type LlmErrorSchemaType = z.ZodObject<{
   message: z.ZodString;
 }>;
 
-type DeepSeekErrorResponseSchemaType = z.ZodObject<{
-  error: z.ZodOptional<z.ZodNullable<DeepSeekErrorSchemaType>>;
+type LlmErrorResponseSchemaType = z.ZodObject<{
+  error: z.ZodOptional<z.ZodNullable<LlmErrorSchemaType>>;
 }>;
 
-const DeepSeekErrorResponseSchema: DeepSeekErrorResponseSchemaType = z
+const LlmErrorResponseSchema: LlmErrorResponseSchemaType = z
   .object({
     error: z
       .object({
@@ -67,7 +67,7 @@ const DeepSeekErrorResponseSchema: DeepSeekErrorResponseSchemaType = z
   })
   .passthrough();
 
-type DeepSeekErrorResponse = z.infer<typeof DeepSeekErrorResponseSchema>;
+type LlmErrorResponse = z.infer<typeof LlmErrorResponseSchema>;
 
 type MatchSchemaType = z.ZodObject<{
   topic_id: z.ZodNumber;
@@ -126,30 +126,39 @@ ${topicLines}
 Respond with strict JSON only.`;
 }
 
-async function callDeepSeek(prompt: string, articleId: number): Promise<string | null> {
-  try {
-    log(
-      "debug",
-      `[article ${articleId}] Sending classification request to DeepSeek (model ${config.DEEPSEEK_MODEL_ID})`,
-    );
+// The local model is unloaded after a few idle minutes and the API answers 503
+// while it reloads, so a 503 is retried a few times before giving up.
+const MAX_UNAVAILABLE_RETRIES: number = 3;
 
-    const response: Response = await fetch(`${config.DEEPSEEK_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: config.DEEPSEEK_MODEL_ID,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        stream: false,
-        temperature: 0,
-        response_format: { type: "json_object" },
-      }),
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function callLlm(prompt: string, articleId: number): Promise<string | null> {
+  try {
+    log("debug", `[article ${articleId}] Sending classification request to LLM (model ${config.LLM_MODEL_ID})`);
+
+    const body: string = JSON.stringify({
+      model: config.LLM_MODEL_ID,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt },
+      ],
+      stream: false,
+      temperature: 0,
+      response_format: { type: "json_object" },
     });
+
+    let response: Response = await postChatCompletion(body);
+
+    for (let attempt: number = 1; response.status === 503 && attempt <= MAX_UNAVAILABLE_RETRIES; attempt++) {
+      log(
+        "warn",
+        `[article ${articleId}] LLM API returned 503 (model loading?), retry ${attempt}/${MAX_UNAVAILABLE_RETRIES} in ${config.LLM_RETRY_DELAY_MS}ms`,
+      );
+      await sleep(config.LLM_RETRY_DELAY_MS);
+      response = await postChatCompletion(body);
+    }
 
     if (!response.ok) {
       let errorMessage: string = `${response.status}`;
@@ -158,7 +167,7 @@ async function callDeepSeek(prompt: string, articleId: number): Promise<string |
         const text: string = await response.text();
 
         try {
-          const parsedError: DeepSeekErrorResponse | undefined = DeepSeekErrorResponseSchema.safeParse(
+          const parsedError: LlmErrorResponse | undefined = LlmErrorResponseSchema.safeParse(
             JSON.parse(text),
           ).data;
           const apiError: string | undefined = parsedError?.error?.message;
@@ -175,33 +184,45 @@ async function callDeepSeek(prompt: string, articleId: number): Promise<string |
         // body read failed, fall back to status-only message
       }
 
-      log("error", `[article ${articleId}] DeepSeek API returned ${errorMessage}`);
+      log("error", `[article ${articleId}] LLM API returned ${errorMessage}`);
       return null;
     }
 
-    const parsed: DeepSeekChatResponse = DeepSeekChatResponseSchema.parse(await response.json());
+    const parsed: ChatCompletionResponse = ChatCompletionResponseSchema.parse(await response.json());
     const content: string | null | undefined = parsed.choices[0]?.message?.content;
 
     if (content == null || content === "") {
-      log("warn", `[article ${articleId}] DeepSeek response had no content`);
+      log("warn", `[article ${articleId}] LLM response had no content`);
       return null;
     }
 
-    const usage: DeepSeekUsage | undefined = DeepSeekUsageSchema.safeParse(parsed.usage).data;
+    const usage: ChatCompletionUsage | undefined = ChatCompletionUsageSchema.safeParse(parsed.usage).data;
 
     log(
       "info",
-      `[article ${articleId}] DeepSeek response${usage ? `, tokens: prompt_tokens=${usage.prompt_tokens} completion_tokens=${usage.completion_tokens} total_tokens=${usage.total_tokens}` : ""}`,
+      `[article ${articleId}] LLM response${usage ? `, tokens: prompt_tokens=${usage.prompt_tokens} completion_tokens=${usage.completion_tokens} total_tokens=${usage.total_tokens}` : ""}`,
     );
 
     return content;
   } catch (err: unknown) {
     log(
       "error",
-      `[article ${articleId}] DeepSeek API call failed: ${err instanceof Error ? err.message : String(err)}`,
+      `[article ${articleId}] LLM API call failed: ${err instanceof Error ? err.message : String(err)}`,
     );
     return null;
   }
+}
+
+function postChatCompletion(body: string): Promise<Response> {
+  return fetch(`${config.LLM_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.LLM_API_KEY}`,
+    },
+    body,
+    signal: AbortSignal.timeout(config.LLM_TIMEOUT_MS),
+  });
 }
 
 export function parseResponse(text: string): ClassifyResult[] | null {
@@ -239,15 +260,28 @@ export async function classifyArticle(
   if (topics.length === 0) return [];
 
   const prompt: string = buildPrompt(articleTitle, articleSummary, topics);
-  const raw: string | null = await callDeepSeek(prompt, articleId);
+  const raw: string | null = await callLlm(prompt, articleId);
   if (!raw) return null;
 
   const result: ClassifyResult[] | null = parseResponse(raw);
-  if (result) return result;
+  if (result) return withMissingTopics(result, topics);
 
   log("warn", `[article ${articleId}] Failed to parse classifier response, retrying`);
 
-  const retryRaw: string | null = await callDeepSeek(prompt, articleId);
+  const retryRaw: string | null = await callLlm(prompt, articleId);
   if (!retryRaw) return null;
-  return parseResponse(retryRaw);
+
+  const retryResult: ClassifyResult[] | null = parseResponse(retryRaw);
+  return retryResult ? withMissingTopics(retryResult, topics) : null;
+}
+
+// The model may list only the topics it considers relevant (or none at all).
+// Every topic still needs a row in article_topic_matches, otherwise the article
+// stays "unchecked" and is re-classified on every cycle.
+function withMissingTopics(result: ClassifyResult[], topics: TopicInfo[]): ClassifyResult[] {
+  const seen: Set<number> = new Set(result.map((match) => match.topic_id));
+  const missing: ClassifyResult[] = topics
+    .filter((topic) => !seen.has(topic.id))
+    .map((topic) => ({ topic_id: topic.id, relevant: false, score: 0, reason: "" }));
+  return missing.length > 0 ? [...result, ...missing] : result;
 }

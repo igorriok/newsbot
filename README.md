@@ -7,7 +7,7 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 - **Feeds are global.** Anyone (admin) adds a feed once and it's polled for everyone.
 - **Topics are per-chat.** Each chat (a private DM or a group) sets its own topics, and only sees matches for its own topics — completely independent of which feed the article came from.
 - Every cycle: fetch all feeds → classify newly-fetched articles against every chat's topics → send one notification.
-- Classification is done by calling the DeepSeek API (OpenAI-compatible chat completions) with a fixed system prompt, requesting strict JSON (one request per article per retry).
+- Classification is done by calling an OpenAI-compatible chat completions API (by default the local `aimage` service, Gemma 4 via LocalAI) with a fixed system prompt, requesting strict JSON (one request per article per retry).
 - Notifications are throttled to **one message per chat per cycle** — the rest stay queued and go out on subsequent cycles, oldest first.
 - If an article has an image (from RSS `media:content`/`media:thumbnail`, an image enclosure, or an `<img>` in the content), the notification is sent as a photo with a caption; otherwise as plain text.
 
@@ -15,7 +15,7 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 
 - Node.js >= 22
 - A Telegram bot token (create one via [@BotFather](https://t.me/BotFather))
-- A DeepSeek API key with chat completions access (e.g. for the `deepseek-v4-flash` model)
+- An API key for an OpenAI-compatible chat completions endpoint (by default the `aimage` service running on this host: create an `ak_...` key on its `/api-keys` page)
 
 ## Setup
 
@@ -26,12 +26,12 @@ A Telegram bot that polls RSS feeds, filters articles by topic using an LLM clas
 2. Copy `.env.example` to `.env` and fill it in:
    ```
    TELEGRAM_BOT_TOKEN=       # from @BotFather
-   DEEPSEEK_API_KEY=         # your DeepSeek API key (chat completions access)
-   DEEPSEEK_MODEL_ID=        # e.g. deepseek-v4-flash
-   # DEEPSEEK_BASE_URL=      # e.g. https://api.deepseek.com (default)
+   LLM_API_KEY=              # API key for the chat completions endpoint (aimage ak_... key)
+   LLM_BASE_URL=             # e.g. https://ai.solonari.com/api/v1 (default)
+   # LLM_MODEL_ID=           # e.g. gemma-4-e4b-it-qat (default; aimage pins the model server-side)
    DATABASE_PATH=            # e.g. ./data/newsbot.db
    ADMIN_TELEGRAM_IDS=       # comma-separated Telegram user IDs allowed to use the bot
-   POLL_CRON_SCHEDULE=       # e.g. */10 * * * * (every 10 minutes)
+   POLL_CRON_SCHEDULE=       # e.g. 0 * * * * (hourly, default)
    ```
    Get your own Telegram ID from [@userinfobot](https://t.me/userinfobot).
 3. Run it:
@@ -48,7 +48,7 @@ Only Telegram user IDs listed in `ADMIN_TELEGRAM_IDS` can use any bot command �
 docker compose up --build -d
 ```
 
-`docker-compose.yml` runs just the bot container — no host networking and no local servers are required. The DeepSeek API key and model come from `.env` (bind-mounted in via `env_file`).
+`docker-compose.yml` runs just the bot container — no host networking and no local servers are required. The classifier reaches the `aimage` API over its public URL (`LLM_BASE_URL`, default `https://ai.solonari.com/api/v1`); the API key and base URL come from `.env` (bind-mounted in via `env_file`).
 
 Both the SQLite database and a rolling log file (`newsbot.log`) live under `./data`, which is bind-mounted into the container — so both survive container rebuilds/recreation.
 

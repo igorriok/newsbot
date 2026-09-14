@@ -3,7 +3,7 @@ import { classifyArticle, type ClassifyResult } from "../src/classifier/client";
 
 /**
  * Pre-deploy manual spot-check (NOT part of the automated test suite):
- * runs the Bug-2 false-positive fixtures against the REAL DeepSeek API N times
+ * runs the Bug-2 false-positive fixtures against the REAL LLM API N times
  * (default 5, configurable via argv) and exits non-zero if any run disagrees
  * with the fixture's mustBeRelevant flag.
  *
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
   let failures: number = 0;
 
   console.log(
-    `Spot-checking ${FIXTURES.length} fixtures against "${TOPIC_PHRASE}" (${runCount} run(s) each, model ${config.DEEPSEEK_MODEL_ID})`,
+    `Spot-checking ${FIXTURES.length} fixtures against "${TOPIC_PHRASE}" (${runCount} run(s) each, model ${config.LLM_MODEL_ID})`,
   );
 
   for (const fixture of FIXTURES) {
