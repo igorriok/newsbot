@@ -100,7 +100,13 @@ export function isCycleRunning(): boolean {
 // `running` true forever and silently skips every cycle after it. This timeout
 // is the backstop: it only unblocks scheduling of future cycles by releasing
 // `running`, it can't cancel the underlying hung request.
-const CYCLE_TIMEOUT_MS: number = 6 * 60 * 1000;
+//
+// The self-hosted classifier serves one request at a time per GPU slot, so a
+// legitimate (non-hung) classification pass over a large batch of articles can
+// take several minutes on its own — 30 articles has taken ~7 minutes end to end.
+// This needs to stay comfortably above that so normal backlog spikes don't trip
+// the backstop and get misreported as a hang.
+const CYCLE_TIMEOUT_MS: number = 20 * 60 * 1000;
 
 export async function pollCycle(): Promise<void> {
   if (running) {
@@ -112,9 +118,11 @@ export async function pollCycle(): Promise<void> {
   log("info", "Poll cycle starting");
 
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let timedOut: boolean = false;
 
   const timeout: Promise<void> = new Promise((_resolve, reject) => {
     timeoutHandle = setTimeout(() => {
+      timedOut = true;
       reject(new Error(`Poll cycle exceeded ${CYCLE_TIMEOUT_MS}ms timeout`));
     }, CYCLE_TIMEOUT_MS);
   });
@@ -125,6 +133,27 @@ export async function pollCycle(): Promise<void> {
     await dispatchNotifications();
   })();
 
+  // The timeout below can only unblock scheduling by racing `work` — it can't
+  // cancel it, so a timed-out cycle keeps running in the background. Keep
+  // `running` true until `work` itself settles, not just until the race does,
+  // otherwise the next cron tick would see `running === false` and start a
+  // second, overlapping cycle against the same LLM endpoint and DB.
+  work
+    .then(() => {
+      if (timedOut) log("info", "Previously timed-out poll cycle work finished");
+    })
+    .catch((err: unknown) => {
+      if (timedOut) {
+        log(
+          "error",
+          `Previously timed-out poll cycle work failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    })
+    .finally(() => {
+      running = false;
+    });
+
   try {
     await Promise.race([work, timeout]);
     log("info", "Poll cycle finished");
@@ -132,6 +161,5 @@ export async function pollCycle(): Promise<void> {
     log("error", `Poll cycle failed or timed out: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     clearTimeout(timeoutHandle);
-    running = false;
   }
 }
